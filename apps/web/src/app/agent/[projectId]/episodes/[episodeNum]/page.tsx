@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Loader2, ArrowLeft, Sparkles, FileText, Palette, Users, MapPin, Film } from 'lucide-react'
+import { Loader2, ArrowLeft, FileText } from 'lucide-react'
 import Link from 'next/link'
 
 import { AgentChat, AgentMessage } from '@/components/agent/AgentChat'
-import { conversationsApi, projectsApi } from '@/lib/api'
+import { conversationsApi } from '@/lib/api'
 import { env } from '@/lib/utils/env'
 import { Button } from '@/components/ui/button'
 
@@ -154,49 +154,29 @@ export default function EpisodeConversationPage() {
             })
 
             if (!resp.ok) {
-                // 如果API不存在，使用模拟数据
-                const mockScript = generateMockScript(episodeNum)
-                displayScriptResult(mockScript)
+                const errData = await resp.json().catch(() => ({ detail: `HTTP ${resp.status}` }))
+                const errorMsg: AgentMessage = {
+                    id: 'error',
+                    role: 'assistant',
+                    content: `抱歉，剧本生成失败：${errData.detail || resp.statusText}\n\n请检查后端服务是否正常运行，然后重试。`,
+                    timestamp: Date.now(),
+                }
+                setMessages(prev => [...prev, errorMsg])
                 return
             }
 
             const data = await resp.json()
             displayScriptResult(data)
         } catch (e) {
-            // 使用模拟数据
-            const mockScript = generateMockScript(episodeNum)
-            displayScriptResult(mockScript)
+            const errorMsg: AgentMessage = {
+                id: 'error',
+                role: 'assistant',
+                content: `抱歉，无法连接到后端服务：${e instanceof Error ? e.message : '网络错误'}\n\n请确保 API 服务 (端口 8000) 已启动。`,
+                timestamp: Date.now(),
+            }
+            setMessages(prev => [...prev, errorMsg])
         } finally {
             setIsTyping(false)
-        }
-    }
-
-    // 生成模拟剧本（临时）
-    function generateMockScript(epNum: number) {
-        return {
-            storySummary: `第${epNum}集的内容梗概将基于您的大纲自动生成。故事将延续前集的情感线，进一步发展角色关系。`,
-            highlights: [
-                { title: '亮点1', description: '情感转折点 - 关键对话场景' },
-                { title: '亮点2', description: '视觉高光 - 唯美氛围营造' },
-                { title: '亮点3', description: '情绪升华 - 内心独白与特写' },
-            ],
-            artStyle: {
-                baseStyle: '韩漫二次元',
-                colorTone: '柔和温暖的复古色彩',
-                atmosphere: '细腻唯美，注重情感表达',
-            },
-            characters: [
-                { name: '主角A', description: '外貌与服装描述' },
-                { name: '主角B', description: '外貌与服装描述' },
-            ],
-            scenes: [
-                { name: '场景1', description: '场景环境描述' },
-                { name: '场景2', description: '场景环境描述' },
-            ],
-            panels: [
-                { id: `${epNum.toString().padStart(2, '0')}-1`, scene: '画面描述', composition: '构图设计', camera: '运镜调度', voice: '旁白', dialogue: '台词内容' },
-                { id: `${epNum.toString().padStart(2, '0')}-2`, scene: '画面描述', composition: '构图设计', camera: '运镜调度', voice: '角色', dialogue: '台词内容' },
-            ],
         }
     }
 
@@ -218,10 +198,9 @@ export default function EpisodeConversationPage() {
 
     // 将剧本格式化为 Markdown
     function formatScriptAsMarkdown(script: any): string {
-        // 支持 snake_case (API) 和 camelCase (mock) 格式
-        const title = script.episode_title || script.episodeTitle || `第${episodeNum}集`
-        const summary = script.story_summary || script.storySummary || '暂无梗概'
-        const artStyle = script.art_style || script.artStyle || {}
+        const title = script.episode_title || `第${episodeNum}集`
+        const summary = script.story_summary || '暂无梗概'
+        const artStyle = script.art_style || {}
 
         let md = `# ${title}\n\n`
         md += `## 📖 故事梗概\n\n${summary}\n\n`
@@ -309,9 +288,25 @@ export default function EpisodeConversationPage() {
 
         setIsTyping(true)
 
-        // 简单的回复
-        setTimeout(async () => {
-            const aiContent = '收到你的反馈！我会根据你的意见调整剧本内容。请告诉我具体需要修改哪些部分：故事梗概、剧本亮点、美术风格、角色设定、场景描述，还是分镜内容？'
+        try {
+            // 调用后端对话 API
+            const resp = await fetch(`${env.API_BASE_URL}/api/v1/conversations/${conversationId}/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: content,
+                    context: { episode_number: episodeNum, project_id: projectId },
+                }),
+            })
+
+            let aiContent: string
+            if (resp.ok) {
+                const data = await resp.json()
+                aiContent = data.response || data.content || data.message || '收到你的反馈，我会进行调整。'
+            } else {
+                aiContent = '抱歉，处理您的消息时出现问题。请稍后再试。'
+            }
+
             const aiMsg: AgentMessage = {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
@@ -320,8 +315,17 @@ export default function EpisodeConversationPage() {
             }
             setMessages(prev => [...prev, aiMsg])
             await saveMessage('assistant', aiContent)
+        } catch (e) {
+            const aiMsg: AgentMessage = {
+                id: (Date.now() + 1).toString(),
+                role: 'assistant',
+                content: `抱歉，无法连接到后端服务。请检查 API 是否正常运行。`,
+                timestamp: Date.now(),
+            }
+            setMessages(prev => [...prev, aiMsg])
+        } finally {
             setIsTyping(false)
-        }, 1000)
+        }
     }
 
     if (isLoading) {

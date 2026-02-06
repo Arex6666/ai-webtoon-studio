@@ -355,40 +355,51 @@ class ToolHandlers:
         chapter_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        渲染指定的分镜
-        
-        Args:
-            panel_ids: 分镜ID列表
-            quality: 质量 (draft, final)
-            chapter_id: 章节ID
-            
-        Returns:
-            渲染任务信息
+        渲染指定的分镜 — 创建真实的 RenderJob 记录
         """
         try:
+            import uuid
+            from app.models.render_job import RenderJob, JobType, JobStatus
+
             logger.info(f"Rendering {len(panel_ids)} panels with quality={quality}")
-            
-            # 启动渲染任务
-            from app.services.auto_storyboard.orchestrator import AutoStoryboardOrchestrator
-            
-            orchestrator = AutoStoryboardOrchestrator(self.db)
-            
-            # 创建渲染作业
-            job_id = f"render_{chapter_id or 'batch'}_{quality}"
-            
-            # TODO: 实际启动渲染
-            # 目前返回模拟结果
+
+            tier = "hero" if quality == "final" else "fast" if quality == "draft" else "normal"
+            jobs_created = []
+
+            for panel_id in panel_ids:
+                panel = self.db.query(Panel).filter(Panel.id == panel_id).first()
+                if not panel:
+                    logger.warning(f"Panel {panel_id} not found, skipping")
+                    continue
+
+                job = RenderJob(
+                    id=str(uuid.uuid4()),
+                    panel_id=panel_id,
+                    chapter_id=chapter_id or panel.chapter_id,
+                    job_type=JobType.FULL_RENDER,
+                    status=JobStatus.QUEUED,
+                    tier=tier,
+                )
+                self.db.add(job)
+                jobs_created.append({
+                    "job_id": job.id,
+                    "panel_id": panel_id,
+                    "status": "queued",
+                })
+
+            self.db.commit()
+
             return {
                 "success": True,
-                "job_id": job_id,
-                "panel_count": len(panel_ids),
+                "jobs": jobs_created,
+                "panel_count": len(jobs_created),
                 "quality": quality,
-                "status": "queued",
-                "message": f"已开始渲染 {len(panel_ids)} 格分镜",
+                "message": f"已创建 {len(jobs_created)} 个渲染任务",
             }
-            
+
         except Exception as e:
             logger.error(f"Render panels failed: {e}")
+            self.db.rollback()
             return {
                 "success": False,
                 "error": str(e),
@@ -399,33 +410,37 @@ class ToolHandlers:
         job_ids: List[str],
     ) -> Dict[str, Any]:
         """
-        获取渲染状态
-        
-        Args:
-            job_ids: 任务ID列表
-            
-        Returns:
-            状态信息
+        获取渲染状态 — 查询真实的 RenderJob 表
         """
         try:
+            from app.models.render_job import RenderJob
+
             logger.info(f"Getting status for {len(job_ids)} jobs")
-            
-            # TODO: 从实际的任务队列获取状态
-            # 目前返回模拟结果
-            statuses = [
-                {
-                    "job_id": job_id,
-                    "status": "processing",
-                    "progress": 0.5,
-                }
-                for job_id in job_ids
-            ]
-            
+
+            statuses = []
+            for job_id in job_ids:
+                job = self.db.query(RenderJob).filter(RenderJob.id == job_id).first()
+                if job:
+                    statuses.append({
+                        "job_id": job.id,
+                        "panel_id": job.panel_id,
+                        "status": job.status,
+                        "progress": job.progress or 0,
+                        "current_step": job.current_step,
+                        "error": job.error_message if hasattr(job, 'error_message') else None,
+                    })
+                else:
+                    statuses.append({
+                        "job_id": job_id,
+                        "status": "not_found",
+                        "progress": 0,
+                    })
+
             return {
                 "success": True,
                 "statuses": statuses,
             }
-            
+
         except Exception as e:
             logger.error(f"Get render status failed: {e}")
             return {
@@ -440,40 +455,43 @@ class ToolHandlers:
         panel_id: str,
     ) -> Dict[str, Any]:
         """
-        分析分镜质量
-        
-        Args:
-            panel_id: 分镜ID
-            
-        Returns:
-            质量分析结果
+        分析分镜质量 — 使用 DraftQA 服务进行真实评估
         """
         try:
+            from app.services.draft_qa import DraftQA
+            from app.models.storyboard_draft import StoryboardDraft
+
             logger.info(f"Analyzing quality for panel {panel_id}")
-            
-            # 获取分镜
+
             panel = self.db.query(Panel).filter(Panel.id == panel_id).first()
             if not panel:
                 return {
                     "success": False,
                     "error": f"分镜 {panel_id} 不存在",
                 }
-            
-            # 调用QA服务
-            # TODO: 实际QA分析
-            analysis = {
-                "panel_id": panel_id,
-                "overall_score": 0.8,
-                "issues": [],
-                "suggestions": [],
-            }
-            
+
+            # 构造 StoryboardDraft 以利用 DraftQA
+            panel_data = panel.data_json or {}
+            draft = StoryboardDraft()
+            draft.panels_json = [panel_data]
+
+            qa = DraftQA()
+            result = qa.evaluate(draft)
+
             return {
                 "success": True,
-                "analysis": analysis,
-                "message": f"分镜质量评分: {analysis['overall_score']:.0%}",
+                "analysis": {
+                    "panel_id": panel_id,
+                    "overall_score": result.score / 100.0,
+                    "passed": result.passed,
+                    "error_count": result.error_count,
+                    "warning_count": result.warning_count,
+                    "fixable_count": result.fixable_count,
+                    "issues": [i.to_dict() for i in result.issues],
+                },
+                "message": f"分镜质量评分: {result.score:.0f}/100 ({'通过' if result.passed else '需修复'})",
             }
-            
+
         except Exception as e:
             logger.error(f"Quality analysis failed: {e}")
             return {
@@ -487,34 +505,41 @@ class ToolHandlers:
         issues: List[str],
     ) -> Dict[str, Any]:
         """
-        建议修复方案
-        
-        Args:
-            panel_id: 分镜ID
-            issues: 问题列表
-            
-        Returns:
-            修复建议
+        建议修复方案 — 使用 LLM 生成修复建议
         """
         try:
+            from app.services.brain.standard_llm import StandardLLMService
+
             logger.info(f"Suggesting fixes for panel {panel_id}, issues: {issues}")
-            
-            # TODO: 调用LLM生成修复建议
-            suggestions = [
-                {
-                    "issue": issue,
-                    "fix": f"建议修复: {issue}",
-                    "auto_fixable": False,
-                }
-                for issue in issues
-            ]
-            
+
+            panel = self.db.query(Panel).filter(Panel.id == panel_id).first()
+            panel_context = ""
+            if panel and panel.data_json:
+                desc = panel.data_json.get("action_description", "")
+                panel_context = f"\n分镜描述: {desc}" if desc else ""
+
+            llm = StandardLLMService()
+            issues_text = "\n".join(f"- {issue}" for issue in issues)
+
+            response = await llm._chat_completion(
+                [
+                    {"role": "system", "content": "你是漫画质检专家。根据问题列表，为每个问题提供具体、可操作的修复建议。返回JSON数组: [{\"issue\": \"原始问题\", \"fix\": \"修复建议\", \"auto_fixable\": true/false}]"},
+                    {"role": "user", "content": f"分镜 {panel_id} 的问题：{panel_context}\n\n{issues_text}"},
+                ],
+                response_format="json",
+            )
+
+            import json
+            suggestions = json.loads(response)
+            if isinstance(suggestions, dict):
+                suggestions = suggestions.get("suggestions", [suggestions])
+
             return {
                 "success": True,
                 "suggestions": suggestions,
                 "message": f"生成了 {len(suggestions)} 条修复建议",
             }
-            
+
         except Exception as e:
             logger.error(f"Suggest fixes failed: {e}")
             return {

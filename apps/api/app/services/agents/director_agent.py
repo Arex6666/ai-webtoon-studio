@@ -204,23 +204,24 @@ class DirectorAgent(BaseAgent):
         intent: IntentAnalysisResult,
         context: Dict[str, Any],
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """处理资产相关意图"""
+        """处理资产相关意图 — 委派给 AssetAgent"""
         yield {
             "type": "message",
             "content": "🎨 [美术总监模式]\n\n正在分析您的资产需求...",
         }
-        
-        # 使用LLM分析资产需求并生成响应
-        response = await self._call_llm(
-            user_message=user_message,
-            system_prompt=self.get_system_prompt(),
-            context=context,
-        )
-        
-        yield {
-            "type": "message",
-            "content": response,
-        }
+
+        if self.db:
+            from app.services.agents.asset_agent import AssetAgent
+            asset_agent = AssetAgent(self.db)
+            async for event in asset_agent.process(user_message, intent, context):
+                yield event
+        else:
+            response = await self._call_llm(
+                user_message=user_message,
+                system_prompt=self.get_system_prompt(),
+                context=context,
+            )
+            yield {"type": "message", "content": response}
 
     async def _handle_render_intent(
         self,
@@ -228,22 +229,24 @@ class DirectorAgent(BaseAgent):
         intent: IntentAnalysisResult,
         context: Dict[str, Any],
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """处理渲染相关意图"""
+        """处理渲染相关意图 — 委派给 RenderingAgent"""
         yield {
             "type": "message",
             "content": "🎬 [制片模式]\n\n正在规划渲染任务...",
         }
-        
-        response = await self._call_llm(
-            user_message=user_message,
-            system_prompt=self.get_system_prompt(),
-            context=context,
-        )
-        
-        yield {
-            "type": "message",
-            "content": response,
-        }
+
+        if self.db:
+            from app.services.agents.rendering_agent import RenderingAgent
+            rendering_agent = RenderingAgent(self.db)
+            async for event in rendering_agent.process(user_message, intent, context):
+                yield event
+        else:
+            response = await self._call_llm(
+                user_message=user_message,
+                system_prompt=self.get_system_prompt(),
+                context=context,
+            )
+            yield {"type": "message", "content": response}
 
     async def _handle_qa_intent(
         self,
@@ -251,22 +254,24 @@ class DirectorAgent(BaseAgent):
         intent: IntentAnalysisResult,
         context: Dict[str, Any],
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """处理质检相关意图"""
+        """处理质检相关意图 — 委派给 QAAgent"""
         yield {
             "type": "message",
             "content": "🔍 [质检模式]\n\n正在分析质量问题...",
         }
-        
-        response = await self._call_llm(
-            user_message=user_message,
-            system_prompt=self.get_system_prompt(),
-            context=context,
-        )
-        
-        yield {
-            "type": "message",
-            "content": response,
-        }
+
+        if self.db:
+            from app.services.agents.qa_agent import QAAgent
+            qa_agent = QAAgent(self.db)
+            async for event in qa_agent.process(user_message, intent, context):
+                yield event
+        else:
+            response = await self._call_llm(
+                user_message=user_message,
+                system_prompt=self.get_system_prompt(),
+                context=context,
+            )
+            yield {"type": "message", "content": response}
 
     async def _handle_general_intent(
         self,

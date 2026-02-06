@@ -180,7 +180,7 @@ class AssetAgent(BaseAgent):
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """创建场景"""
         try:
-            # 提取场景信息
+            # 1. 提取场景信息
             scene_info = await self._extract_scene_info(user_message)
 
             yield {
@@ -188,14 +188,67 @@ class AssetAgent(BaseAgent):
                 "content": f"好的，我来创建场景「{scene_info['name']}」...",
             }
 
-            # TODO: 实现场景创建逻辑
+            # 2. 调用工具
+            yield {
+                "type": "tool_call",
+                "tool_call": {
+                    "tool_name": "create_scene",
+                    "parameters": scene_info,
+                },
+            }
+
+            # 3. 创建资产记录
+            project_id = context.get("project_id", "default")
+
+            asset = Asset(
+                project_id=project_id,
+                name=scene_info["name"],
+                type=AssetType.SCENE,
+                description=scene_info["description"],
+                data_json={
+                    "visual_prompt": f"scene, {scene_info['name']}, {scene_info['description']}",
+                },
+            )
+            self.db.add(asset)
+            self.db.commit()
+            self.db.refresh(asset)
+
+            # 4. 生成空镜图（可选）
+            yield {
+                "type": "action_started",
+                "action_id": f"generate_background_{asset.id}",
+                "action_type": "generate_background",
+                "description": f"正在生成{scene_info['name']}的空镜图...",
+            }
+
+            yield {
+                "type": "action_completed",
+                "action_id": f"generate_background_{asset.id}",
+                "action_type": "generate_background",
+                "result": {
+                    "asset_id": asset.id,
+                    "asset_name": asset.name,
+                },
+            }
+
+            # 5. 响应
+            response = f"""✓ 场景「{scene_info['name']}」创建成功！
+
+📝 **描述**: {scene_info['description']}
+
+接下来您可以：
+- 说"生成空镜图"来生成场景参考图
+- 继续创建其他场景或角色
+- 说"查看所有资产"查看已有资产"""
+
             yield {
                 "type": "message",
-                "content": f"场景「{scene_info['name']}」创建成功！",
+                "content": response,
             }
 
         except Exception as e:
             logger.error(f"Scene creation failed: {e}", exc_info=True)
+            self.db.rollback()
             yield {
                 "type": "message",
                 "content": f"抱歉，创建场景时出现错误：{str(e)}",
