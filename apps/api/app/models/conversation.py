@@ -2,7 +2,7 @@
 Conversation Model - 对话会话模型
 """
 from sqlalchemy import Column, String, Integer, Text, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID, JSON
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import relationship
 import uuid
 

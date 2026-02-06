@@ -11,7 +11,7 @@ import time
 import logging
 
 from app.core.config import settings
-from app.services.video import get_video_provider, list_providers as list_video_providers
+from app.services.video import get_video_provider
 
 logger = logging.getLogger(__name__)
 

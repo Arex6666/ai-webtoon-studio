@@ -8,15 +8,15 @@ Parse → Plan → Bind
 import json
 import logging
 from typing import List, Dict, Any, Optional, Tuple
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
 from app.schemas.script_ir import (
-    ScriptIR, CharacterIR, SceneIR, BeatIR, 
-    CharacterRelationship, create_empty_script_ir
+    ScriptIR, CharacterIR, SceneIR, BeatIR,
+    CharacterRelationship,
 )
 from app.schemas.director_profile import (
-    DirectorProfile, ShotGrammar, ShotType, CameraMove, CameraAngle,
-    get_default_director
+    DirectorProfile,
+    get_default_director,
 )
 
 logger = logging.getLogger(__name__)

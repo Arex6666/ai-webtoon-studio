@@ -15,7 +15,7 @@ from app.models.panel import Panel
 from app.models.render_job import RenderJob, JobType, JobStatus
 from app.models.asset import Asset
 from app.schemas.panel_spec import PanelSpec
-from app.schemas.layer_pack_meta import LayerPackMeta, LayerFiles, QAResult, GenerationParams
+from app.schemas.layer_pack_meta import LayerPackMeta
 from app.services.layer_factory import get_comfyui_client, PayloadBuilder
 
 router = APIRouter()

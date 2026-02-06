@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.models.chapter import Chapter
 from app.models.project import Project
 from app.models.revision import Revision
-from app.schemas.chapter_layout import ChapterLayout, PanelSlot, PanelWeight, ReadingFlow
+from app.schemas.chapter_layout import ChapterLayout, ReadingFlow
 
 router = APIRouter()
 
@@ -1130,17 +1130,6 @@ async def run_storyboard_task(
                     db.commit()
             except Exception as apply_err:
                 raise Exception(f"Auto-apply draft failed: {apply_err}") from apply_err
-        
-        # TODO: 发送 WebSocket 事件 storyboard_draft_ready
-        # await ws_manager.broadcast({
-        #     "type": "storyboard_draft_ready",
-        #     "payload": {
-        #         "jobId": job_id,
-        #         "chapterId": chapter_id,
-        #         "draftId": draft_id,
-        #         "panelsCount": len(panels_json)
-        #     }
-        # })
         
     except Exception as e:
         db.rollback()

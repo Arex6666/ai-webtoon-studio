@@ -13,7 +13,6 @@ from app.models.panel import Panel
 from app.models.chapter import Chapter
 from app.models.render_job import RenderJob, JobType, JobStatus
 from app.schemas.panel_spec import PanelSpec
-from app.schemas.chapter_layout import PanelSlot, PanelWeight
 
 router = APIRouter()
 
