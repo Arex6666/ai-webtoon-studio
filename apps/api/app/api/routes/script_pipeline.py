@@ -13,11 +13,8 @@ from app.core.database import get_db
 from app.models.chapter import Chapter
 from app.models.asset import Asset
 from app.services.script_pipeline import (
-    ScriptPipelineService, 
+    ScriptPipelineService,
     create_pipeline,
-    ParseResult,
-    PlanResult,
-    BindResult
 )
 from app.schemas.script_ir import ScriptIR
 from app.schemas.director_profile import (

@@ -202,26 +202,3 @@ export function EpisodeTree({
         </div>
     )
 }
-
-// Demo data
-export const demoEpisodes: Episode[] = [
-    {
-        id: '1',
-        number: 1,
-        title: '初遇',
-        phases: [
-            { id: 'script', name: '剧本', status: 'locked' },
-            { id: 'storyboard', name: '分镜', status: 'draft' },
-            { id: 'assets', name: '资产', status: 'pending', pendingCount: 3 },
-            { id: 'render', name: '生成', status: 'pending' },
-            { id: 'qa', name: '质检', status: 'pending' },
-            { id: 'export', name: '成片', status: 'pending' },
-        ]
-    },
-    {
-        id: '2',
-        number: 2,
-        title: '误会',
-        phases: defaultPhases.map(p => ({ ...p }))
-    }
-]

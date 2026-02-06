@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.prop_asset import PropAsset, PropCategory
 from app.models.outfit_variant import OutfitVariant
-from app.models.asset_relation import AssetRelation, RelationType
+from app.models.asset_relation import AssetRelation
 from app.models.asset import Asset
 from app.services.brain.standard_llm import StandardLLMService
 

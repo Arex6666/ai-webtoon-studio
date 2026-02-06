@@ -13,7 +13,6 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import datetime
 import uuid
-import io
 import logging
 
 from app.core.database import get_db

@@ -13,7 +13,6 @@ from app.services.brain.base import (
     ScriptParseResult,
     ContinuityCheckResult,
     ContinuityIssue,
-    ParsedPanel
 )
 
 router = APIRouter()

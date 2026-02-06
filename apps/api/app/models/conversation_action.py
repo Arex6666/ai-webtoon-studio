@@ -2,7 +2,7 @@
 ConversationAction Model - 对话触发的动作模型
 """
 from sqlalchemy import Column, String, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID, JSON
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import relationship
 import uuid
 

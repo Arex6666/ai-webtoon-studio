@@ -7,6 +7,7 @@ import {
     RefreshCw, ExternalLink, Check, ChevronDown, Loader2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { assetsApi } from '@/lib/api'
 import { AssetPicker, Asset } from './AssetPicker'
 
 export interface AssetBinding {
@@ -222,10 +223,14 @@ export function AssetSlotPanel({ panelId, panelNumber, bindings, onBindingChange
 
     const handleRegenerate = async (id: string) => {
         setRegeneratingId(id)
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1500))
-        setRegeneratingId(null)
-        showToast('已生成 3 个候选资产')
+        try {
+            const result = await assetsApi.regenerateReference(id)
+            showToast(result.message || '已重新生成资产参考图')
+        } catch (e) {
+            showToast(`生成失败：${e instanceof Error ? e.message : '请稍后重试'}`)
+        } finally {
+            setRegeneratingId(null)
+        }
     }
 
     const handleOpenLibrary = (id: string) => {

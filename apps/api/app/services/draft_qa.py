@@ -6,7 +6,7 @@ Draft QA Service (S3-05)
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Dict, Optional, Literal
+from typing import List, Dict, Optional
 from app.models.storyboard_draft import StoryboardDraft
 
 

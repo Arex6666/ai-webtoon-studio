@@ -10,9 +10,7 @@ from dataclasses import dataclass
 
 from app.core.config import settings
 from app.services.layer_factory.doubao_image_provider import (
-    DoubaoImageProvider,
     DoubaoImageRequest,
-    DoubaoImageResult,
     get_doubao_image_provider,
 )
 from app.services.storage import get_object_store
