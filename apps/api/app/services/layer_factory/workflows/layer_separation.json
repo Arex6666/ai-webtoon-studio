@@ -1,0 +1,164 @@
+{
+    "name": "layer_separation",
+    "version": "1.0.0",
+    "description": "图层分离 - 角色抠图 (SAM/Segment Anything)",
+    "nodes": {
+        "1": {
+            "inputs": {
+                "image": "{{source_image}}"
+            },
+            "class_type": "LoadImage",
+            "_meta": {
+                "title": "Load Source Image"
+            }
+        },
+        "2": {
+            "inputs": {
+                "model_name": "sam_vit_h_4b8939.pth",
+                "device_mode": "AUTO"
+            },
+            "class_type": "SAMModelLoader",
+            "_meta": {
+                "title": "Load SAM Model"
+            }
+        },
+        "3": {
+            "inputs": {
+                "image": [
+                    "1",
+                    0
+                ],
+                "sam_model": [
+                    "2",
+                    0
+                ],
+                "point_coords": "{{point_coords}}",
+                "point_labels": "{{point_labels}}",
+                "multimask_output": false
+            },
+            "class_type": "SAMPredictor",
+            "_meta": {
+                "title": "SAM Predict Mask"
+            }
+        },
+        "4": {
+            "inputs": {
+                "mask": [
+                    "3",
+                    0
+                ],
+                "iterations": 2
+            },
+            "class_type": "MaskDilate",
+            "_meta": {
+                "title": "Dilate Mask"
+            }
+        },
+        "5": {
+            "inputs": {
+                "image": [
+                    "1",
+                    0
+                ],
+                "mask": [
+                    "4",
+                    0
+                ]
+            },
+            "class_type": "MaskToImage",
+            "_meta": {
+                "title": "Mask to Image"
+            }
+        },
+        "6": {
+            "inputs": {
+                "filename_prefix": "webtoon/layer_mask",
+                "images": [
+                    "5",
+                    0
+                ]
+            },
+            "class_type": "SaveImage",
+            "_meta": {
+                "title": "Save Mask"
+            }
+        },
+        "7": {
+            "inputs": {
+                "image": [
+                    "1",
+                    0
+                ],
+                "mask": [
+                    "4",
+                    0
+                ],
+                "mode": "cut"
+            },
+            "class_type": "ImageApplyMask",
+            "_meta": {
+                "title": "Apply Mask - Character"
+            }
+        },
+        "8": {
+            "inputs": {
+                "filename_prefix": "webtoon/layer_char",
+                "images": [
+                    "7",
+                    0
+                ]
+            },
+            "class_type": "SaveImage",
+            "_meta": {
+                "title": "Save Character Layer"
+            }
+        },
+        "9": {
+            "inputs": {
+                "mask": [
+                    "4",
+                    0
+                ]
+            },
+            "class_type": "MaskInvert",
+            "_meta": {
+                "title": "Invert Mask"
+            }
+        },
+        "10": {
+            "inputs": {
+                "image": [
+                    "1",
+                    0
+                ],
+                "mask": [
+                    "9",
+                    0
+                ],
+                "mode": "inpaint"
+            },
+            "class_type": "ImageApplyMask",
+            "_meta": {
+                "title": "Apply Mask - Background"
+            }
+        },
+        "11": {
+            "inputs": {
+                "filename_prefix": "webtoon/layer_bg",
+                "images": [
+                    "10",
+                    0
+                ]
+            },
+            "class_type": "SaveImage",
+            "_meta": {
+                "title": "Save Background Layer"
+            }
+        }
+    },
+    "defaults": {
+        "source_image": "",
+        "point_coords": "[[540, 960]]",
+        "point_labels": "[1]"
+    }
+}

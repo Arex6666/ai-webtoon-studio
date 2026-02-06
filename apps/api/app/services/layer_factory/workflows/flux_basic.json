@@ -1,0 +1,177 @@
+{
+    "name": "flux_basic",
+    "version": "1.0.0",
+    "description": "Flux 基础文生图 workflow",
+    "nodes": {
+        "1": {
+            "inputs": {
+                "unet_name": "flux1-dev.safetensors",
+                "weight_dtype": "default"
+            },
+            "class_type": "UNETLoader",
+            "_meta": {
+                "title": "Load Diffusion Model"
+            }
+        },
+        "2": {
+            "inputs": {
+                "clip_name1": "t5xxl_fp8_e4m3fn.safetensors",
+                "clip_name2": "clip_l.safetensors",
+                "type": "flux"
+            },
+            "class_type": "DualCLIPLoader",
+            "_meta": {
+                "title": "DualCLIPLoader"
+            }
+        },
+        "3": {
+            "inputs": {
+                "vae_name": "ae.safetensors"
+            },
+            "class_type": "VAELoader",
+            "_meta": {
+                "title": "Load VAE"
+            }
+        },
+        "4": {
+            "inputs": {
+                "text": "{{positive_prompt}}",
+                "clip": [
+                    "2",
+                    0
+                ]
+            },
+            "class_type": "CLIPTextEncode",
+            "_meta": {
+                "title": "CLIP Text Encode (Positive)"
+            }
+        },
+        "5": {
+            "inputs": {
+                "width": "{{width}}",
+                "height": "{{height}}",
+                "batch_size": 1
+            },
+            "class_type": "EmptySD3LatentImage",
+            "_meta": {
+                "title": "EmptySD3LatentImage"
+            }
+        },
+        "6": {
+            "inputs": {
+                "noise": [
+                    "7",
+                    0
+                ],
+                "guider": [
+                    "8",
+                    0
+                ],
+                "sampler": [
+                    "9",
+                    0
+                ],
+                "sigmas": [
+                    "10",
+                    0
+                ],
+                "latent_image": [
+                    "5",
+                    0
+                ]
+            },
+            "class_type": "SamplerCustomAdvanced",
+            "_meta": {
+                "title": "SamplerCustomAdvanced"
+            }
+        },
+        "7": {
+            "inputs": {
+                "noise_seed": "{{seed}}"
+            },
+            "class_type": "RandomNoise",
+            "_meta": {
+                "title": "RandomNoise"
+            }
+        },
+        "8": {
+            "inputs": {
+                "model": [
+                    "1",
+                    0
+                ],
+                "conditioning": [
+                    "4",
+                    0
+                ]
+            },
+            "class_type": "BasicGuider",
+            "_meta": {
+                "title": "BasicGuider"
+            }
+        },
+        "9": {
+            "inputs": {
+                "sampler_name": "{{sampler}}"
+            },
+            "class_type": "KSamplerSelect",
+            "_meta": {
+                "title": "KSamplerSelect"
+            }
+        },
+        "10": {
+            "inputs": {
+                "scheduler": "{{scheduler}}",
+                "steps": "{{steps}}",
+                "denoise": 1,
+                "model": [
+                    "1",
+                    0
+                ]
+            },
+            "class_type": "BasicScheduler",
+            "_meta": {
+                "title": "BasicScheduler"
+            }
+        },
+        "11": {
+            "inputs": {
+                "samples": [
+                    "6",
+                    0
+                ],
+                "vae": [
+                    "3",
+                    0
+                ]
+            },
+            "class_type": "VAEDecode",
+            "_meta": {
+                "title": "VAE Decode"
+            }
+        },
+        "12": {
+            "inputs": {
+                "filename_prefix": "webtoon/panel",
+                "images": [
+                    "11",
+                    0
+                ]
+            },
+            "class_type": "SaveImage",
+            "_meta": {
+                "title": "Save Image"
+            }
+        }
+    },
+    "defaults": {
+        "positive_prompt": "masterpiece, best quality",
+        "negative_prompt": "",
+        "width": 1080,
+        "height": 1920,
+        "seed": 42,
+        "steps": 20,
+        "sampler": "euler",
+        "scheduler": "normal"
+    }
+}

@@ -1,0 +1,59 @@
+{
+    "name": "pose_estimation",
+    "version": "1.0.0",
+    "description": "姿态估计 (OpenPose / DWPose)",
+    "nodes": {
+        "1": {
+            "inputs": {
+                "image": "{{source_image}}"
+            },
+            "class_type": "LoadImage",
+            "_meta": {
+                "title": "Load Source Image"
+            }
+        },
+        "2": {
+            "inputs": {
+                "detect_hand": true,
+                "detect_body": true,
+                "detect_face": true,
+                "resolution": 512,
+                "bbox_detector": "yolox_l.onnx",
+                "pose_estimator": "dw-ll_ucoco_384.onnx"
+            },
+            "class_type": "DWPreprocessor",
+            "_meta": {
+                "title": "DWPose Preprocessor"
+            }
+        },
+        "3": {
+            "inputs": {
+                "image": [
+                    "1",
+                    0
+                ],
+                "preprocessor": [
+                    "2",
+                    0
+                ]
+            },
+            "class_type": "AIO_Preprocessor",
+            "_meta": {
+                "title": "Apply Preprocessor"
+            }
+        },
+        "4": {
+            "inputs": {
+                "filename_prefix": "webtoon/pose",
+                "images": [
+                    "3",
+                    0
+                ]
+            },
+            "class_type": "SaveImage"
+        }
+    },
+    "defaults": {
+        "source_image": ""
+    }
+}

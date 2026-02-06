@@ -1,0 +1,31 @@
+============================================================
+Testing Doubao Seedream 4.5 API (using requests)
+============================================================
+API Key: f4ae9b47-1195-4414-8...
+Payload: {
+  "model": "doubao-seedream-4-5-251128",
+  "prompt": "a cute cat sitting on a sofa, realistic photo, square",
+  "size": "2K",
+  "response_format": "url"
+}
+Sending request...
+Status: 200
+Response: {
+  "model": "doubao-seedream-4-5-251128",
+  "created": 1770095115,
+  "data": [
+    {
+      "url": "https://ark-content-generation-v2-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-4-5/02177009510517616dabaa0009f2072746158e4fa82f6a760b1cb_0.jpeg?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260203%2Fcn-beijing%2Ftos%2Frequest&X-Tos-Date=20260203T050515Z&X-Tos-Expires=86400&X-Tos-Signature=ddcb29157b814e2f95b28a289dc5b8b02c1b9159eaf2ecfc516ab95fd97bf894&X-Tos-SignedHeaders=host&x-tos-process=image%2Fwatermark%2Cimage_YXNzZXRzL3dhdGVybWFya192MS5wbmc_eC10b3MtcHJvY2Vzcz1pbWFnZS9yZXNpemUscF8xNTU%3D%2Cx_136%2Cy_136",
+      "size": "2048x2048"
+    }
+  ],
+  "usage": {
+    "generated_images": 1,
+    "output_tokens": 16384,
+    "total_tokens": 16384
+  }
+}
+============================================================
+SUCCESS! Image generated!
+Image URL: https://ark-content-generation-v2-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-4-5/021770095...
+============================================================

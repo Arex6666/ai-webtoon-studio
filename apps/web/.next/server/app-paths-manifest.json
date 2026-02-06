@@ -1,0 +1,8 @@
+{
+  "/agent/[projectId]/episodes/[episodeNum]/page": "app/agent/[projectId]/episodes/[episodeNum]/page.js",
+  "/projects/[projectId]/chapters/[chapterId]/studio/page": "app/projects/[projectId]/chapters/[chapterId]/studio/page.js",
+  "/assets/page": "app/assets/page.js",
+  "/agent/[projectId]/episodes/page": "app/agent/[projectId]/episodes/page.js",
+  "/agent/[projectId]/page": "app/agent/[projectId]/page.js",
+  "/production/page": "app/production/page.js"
+}

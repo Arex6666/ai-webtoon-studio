@@ -1,0 +1,199 @@
+{
+    "name": "flux_controlnet",
+    "version": "1.0.0",
+    "description": "Flux + ControlNet 控制生成",
+    "nodes": {
+        "1": {
+            "inputs": {
+                "unet_name": "flux1-dev.safetensors",
+                "weight_dtype": "default"
+            },
+            "class_type": "UNETLoader"
+        },
+        "2": {
+            "inputs": {
+                "clip_name1": "t5xxl_fp8_e4m3fn.safetensors",
+                "clip_name2": "clip_l.safetensors",
+                "type": "flux"
+            },
+            "class_type": "DualCLIPLoader"
+        },
+        "3": {
+            "inputs": {
+                "vae_name": "ae.safetensors"
+            },
+            "class_type": "VAELoader"
+        },
+        "10": {
+            "inputs": {
+                "control_net_name": "{{controlnet_model}}"
+            },
+            "class_type": "ControlNetLoader",
+            "_meta": {
+                "title": "Load ControlNet"
+            }
+        },
+        "11": {
+            "inputs": {
+                "image": "{{control_image}}"
+            },
+            "class_type": "LoadImage",
+            "_meta": {
+                "title": "Load Control Image"
+            }
+        },
+        "12": {
+            "inputs": {
+                "positive": [
+                    "4",
+                    0
+                ],
+                "negative": [
+                    "4b",
+                    0
+                ],
+                "control_net": [
+                    "10",
+                    0
+                ],
+                "image": [
+                    "11",
+                    0
+                ],
+                "strength": "{{controlnet_strength}}",
+                "start_percent": 0,
+                "end_percent": 1
+            },
+            "class_type": "ControlNetApplyAdvanced",
+            "_meta": {
+                "title": "Apply ControlNet"
+            }
+        },
+        "4": {
+            "inputs": {
+                "text": "{{positive_prompt}}",
+                "clip": [
+                    "2",
+                    0
+                ]
+            },
+            "class_type": "CLIPTextEncode"
+        },
+        "4b": {
+            "inputs": {
+                "text": "{{negative_prompt}}",
+                "clip": [
+                    "2",
+                    0
+                ]
+            },
+            "class_type": "CLIPTextEncode"
+        },
+        "5": {
+            "inputs": {
+                "width": "{{width}}",
+                "height": "{{height}}",
+                "batch_size": 1
+            },
+            "class_type": "EmptySD3LatentImage"
+        },
+        "6": {
+            "inputs": {
+                "noise": [
+                    "7",
+                    0
+                ],
+                "guider": [
+                    "8",
+                    0
+                ],
+                "sampler": [
+                    "9",
+                    0
+                ],
+                "sigmas": [
+                    "14",
+                    0
+                ],
+                "latent_image": [
+                    "5",
+                    0
+                ]
+            },
+            "class_type": "SamplerCustomAdvanced"
+        },
+        "7": {
+            "inputs": {
+                "noise_seed": "{{seed}}"
+            },
+            "class_type": "RandomNoise"
+        },
+        "8": {
+            "inputs": {
+                "model": [
+                    "1",
+                    0
+                ],
+                "conditioning": [
+                    "12",
+                    0
+                ]
+            },
+            "class_type": "BasicGuider"
+        },
+        "9": {
+            "inputs": {
+                "sampler_name": "{{sampler}}"
+            },
+            "class_type": "KSamplerSelect"
+        },
+        "14": {
+            "inputs": {
+                "scheduler": "{{scheduler}}",
+                "steps": "{{steps}}",
+                "denoise": 1,
+                "model": [
+                    "1",
+                    0
+                ]
+            },
+            "class_type": "BasicScheduler"
+        },
+        "15": {
+            "inputs": {
+                "samples": [
+                    "6",
+                    0
+                ],
+                "vae": [
+                    "3",
+                    0
+                ]
+            },
+            "class_type": "VAEDecode"
+        },
+        "16": {
+            "inputs": {
+                "filename_prefix": "webtoon/controlnet",
+                "images": [
+                    "15",
+                    0
+                ]
+            },
+            "class_type": "SaveImage"
+        }
+    },
+    "defaults": {
+        "positive_prompt": "masterpiece, best quality",
+        "negative_prompt": "low quality, blurry",
+        "width": 1080,
+        "height": 1920,
+        "seed": 42,
+        "steps": 20,
+        "sampler": "euler",
+        "scheduler": "normal",
+        "controlnet_model": "control_v11p_sd15_depth_fp16.safetensors",
+        "controlnet_strength": 0.8,
+        "control_image": ""
+    }
+}

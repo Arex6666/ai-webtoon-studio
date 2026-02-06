@@ -1,0 +1,54 @@
+{
+    "name": "depth_estimation",
+    "version": "1.0.0",
+    "description": "深度图估计 (Depth Anything / MiDaS)",
+    "nodes": {
+        "1": {
+            "inputs": {
+                "image": "{{source_image}}"
+            },
+            "class_type": "LoadImage",
+            "_meta": {
+                "title": "Load Source Image"
+            }
+        },
+        "2": {
+            "inputs": {
+                "model": "depth_anything_vitl14.pth"
+            },
+            "class_type": "DepthAnythingLoader",
+            "_meta": {
+                "title": "Load Depth Model"
+            }
+        },
+        "3": {
+            "inputs": {
+                "image": [
+                    "1",
+                    0
+                ],
+                "depth_model": [
+                    "2",
+                    0
+                ]
+            },
+            "class_type": "DepthAnythingPredict",
+            "_meta": {
+                "title": "Predict Depth"
+            }
+        },
+        "4": {
+            "inputs": {
+                "filename_prefix": "webtoon/depth",
+                "images": [
+                    "3",
+                    0
+                ]
+            },
+            "class_type": "SaveImage"
+        }
+    },
+    "defaults": {
+        "source_image": ""
+    }
+}

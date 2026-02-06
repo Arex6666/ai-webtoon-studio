@@ -1,0 +1,15 @@
+==================================================
+Testing Volcengine Ark API Connection
+==================================================
+
+1. Testing DNS resolution...
+   OK: ark.cn-beijing.volces.com -> 101.126.7.76
+
+2. Testing HTTPS connection...
+   OK: HTTPS connection successful! Status: 401
+   OK: Server responded (401 = auth needed, expected)
+
+3. Proxy configuration...
+   No proxy configured
+
+==================================================

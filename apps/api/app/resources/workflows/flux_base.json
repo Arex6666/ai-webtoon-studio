@@ -1,0 +1,128 @@
+{
+    "5": {
+        "class_type": "EmptyLatentImage",
+        "inputs": {
+            "width": 1024,
+            "height": 1024,
+            "batch_size": 1
+        },
+        "_meta": {
+            "title": "Empty Latent"
+        }
+    },
+    "6": {
+        "class_type": "CLIPTextEncode",
+        "inputs": {
+            "text": "a beautiful anime girl",
+            "clip": [
+                "11",
+                0
+            ]
+        },
+        "_meta": {
+            "title": "Positive"
+        }
+    },
+    "7": {
+        "class_type": "CLIPTextEncode",
+        "inputs": {
+            "text": "ugly, blurry, low quality",
+            "clip": [
+                "11",
+                0
+            ]
+        },
+        "_meta": {
+            "title": "Negative"
+        }
+    },
+    "10": {
+        "class_type": "UNETLoader",
+        "inputs": {
+            "unet_name": "flux1-dev-fp8.safetensors",
+            "weight_dtype": "fp8_e4m3fn"
+        },
+        "_meta": {
+            "title": "Load Flux UNet"
+        }
+    },
+    "11": {
+        "class_type": "DualCLIPLoader",
+        "inputs": {
+            "clip_name1": "t5xxl_fp16.safetensors",
+            "clip_name2": "clip_l.safetensors",
+            "type": "flux"
+        },
+        "_meta": {
+            "title": "Load CLIP"
+        }
+    },
+    "12": {
+        "class_type": "VAELoader",
+        "inputs": {
+            "vae_name": "ae.safetensors"
+        },
+        "_meta": {
+            "title": "Load VAE"
+        }
+    },
+    "13": {
+        "class_type": "KSampler",
+        "inputs": {
+            "seed": -1,
+            "steps": 20,
+            "cfg": 3.5,
+            "sampler_name": "euler",
+            "scheduler": "simple",
+            "denoise": 1.0,
+            "model": [
+                "10",
+                0
+            ],
+            "positive": [
+                "6",
+                0
+            ],
+            "negative": [
+                "7",
+                0
+            ],
+            "latent_image": [
+                "5",
+                0
+            ]
+        },
+        "_meta": {
+            "title": "KSampler"
+        }
+    },
+    "8": {
+        "class_type": "VAEDecode",
+        "inputs": {
+            "samples": [
+                "13",
+                0
+            ],
+            "vae": [
+                "12",
+                0
+            ]
+        },
+        "_meta": {
+            "title": "VAE Decode"
+        }
+    },
+    "9": {
+        "class_type": "SaveImage",
+        "inputs": {
+            "filename_prefix": "WebtoonStudio",
+            "images": [
+                "8",
+                0
+            ]
+        },
+        "_meta": {
+            "title": "Save Image"
+        }
+    }
+}

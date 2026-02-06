@@ -1,0 +1,161 @@
+{
+  "_meta": {
+    "title": "完整资产注入工作流",
+    "description": "FaceID + ControlNet + Style LoRA 全套一致性控制",
+    "version": "1.0"
+  },
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "sd_xl_base_1.0.safetensors"
+    },
+    "_meta": {"title": "Load Checkpoint"}
+  },
+  "2": {
+    "class_type": "IPAdapterModelLoader",
+    "inputs": {
+      "ipadapter_file": "ip-adapter-faceid_sdxl.bin"
+    },
+    "_meta": {"title": "Load IP-Adapter FaceID"}
+  },
+  "3": {
+    "class_type": "InsightFaceLoader",
+    "inputs": {
+      "provider": "CPU"
+    },
+    "_meta": {"title": "Load InsightFace"}
+  },
+  "4": {
+    "class_type": "ControlNetLoader",
+    "inputs": {
+      "control_net_name": "control_v11f1p_sd15_depth.safetensors"
+    },
+    "_meta": {"title": "Load Depth ControlNet"}
+  },
+  "5": {
+    "class_type": "ControlNetLoader",
+    "inputs": {
+      "control_net_name": "control_v11p_sd15_lineart.safetensors"
+    },
+    "_meta": {"title": "Load Lineart ControlNet"}
+  },
+  "6": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{faceid_reference_image}}"
+    },
+    "_meta": {"title": "FaceID Reference", "dynamic": true}
+  },
+  "7": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{depth_map_image}}"
+    },
+    "_meta": {"title": "Depth Map", "dynamic": true}
+  },
+  "8": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{lineart_map_image}}"
+    },
+    "_meta": {"title": "Lineart Map", "dynamic": true}
+  },
+  "9": {
+    "class_type": "IPAdapterFaceID",
+    "inputs": {
+      "model": ["1", 0],
+      "ipadapter": ["2", 0],
+      "insightface": ["3", 0],
+      "image": ["6", 0],
+      "weight": 0.7,
+      "weight_faceidv2": 0.7,
+      "combine_embeds": "average",
+      "start_at": 0.0,
+      "end_at": 1.0
+    },
+    "_meta": {"title": "Apply FaceID"}
+  },
+  "10": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["1", 1],
+      "text": "{{positive_prompt}}"
+    },
+    "_meta": {"title": "Positive Prompt", "dynamic": true}
+  },
+  "11": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["1", 1],
+      "text": "{{negative_prompt}}"
+    },
+    "_meta": {"title": "Negative Prompt", "dynamic": true}
+  },
+  "12": {
+    "class_type": "ControlNetApplyAdvanced",
+    "inputs": {
+      "positive": ["10", 0],
+      "negative": ["11", 0],
+      "control_net": ["4", 0],
+      "image": ["7", 0],
+      "strength": 0.6,
+      "start_percent": 0.0,
+      "end_percent": 0.8
+    },
+    "_meta": {"title": "Apply Depth ControlNet"}
+  },
+  "13": {
+    "class_type": "ControlNetApplyAdvanced",
+    "inputs": {
+      "positive": ["12", 0],
+      "negative": ["12", 1],
+      "control_net": ["5", 0],
+      "image": ["8", 0],
+      "strength": 0.5,
+      "start_percent": 0.0,
+      "end_percent": 0.6
+    },
+    "_meta": {"title": "Apply Lineart ControlNet"}
+  },
+  "14": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "_meta": {"title": "Latent Size"}
+  },
+  "15": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["9", 0],
+      "positive": ["13", 0],
+      "negative": ["13", 1],
+      "latent_image": ["14", 0],
+      "seed": -1,
+      "steps": 30,
+      "cfg": 7.0,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "normal",
+      "denoise": 1.0
+    },
+    "_meta": {"title": "KSampler"}
+  },
+  "16": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["15", 0],
+      "vae": ["1", 2]
+    },
+    "_meta": {"title": "VAE Decode"}
+  },
+  "17": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["16", 0],
+      "filename_prefix": "webtoon_full"
+    },
+    "_meta": {"title": "Save Output"}
+  }
+}

@@ -1,0 +1,314 @@
+/* AI Webtoon Studio - Global Styles */
+/* Design System: MASTER.md - Motion-Driven, Playful, Creative */
+
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============ CSS Variables (MASTER.md Design System) ============ */
+:root {
+  /* Core Palette */
+  --color-primary: #18181B;
+  --color-secondary: #27272A;
+  --color-cta: #F8FAFC;
+  --color-background: #000000;
+  --color-text: #FAFAFA;
+
+  /* Extended Palette */
+  --color-muted: #71717A;
+  --color-border: #3F3F46;
+  --color-surface: #18181B;
+  --color-surface-hover: #27272A;
+
+  /* Accent Colors */
+  --color-accent-emerald: #10B981;
+  --color-accent-cyan: #06B6D4;
+  --color-accent-violet: #8B5CF6;
+  --color-accent-amber: #F59E0B;
+  --color-accent-rose: #F43F5E;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+
+  /* Shadows (dark theme optimized) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.6);
+
+  /* Glow Effects (from recommendations) */
+  --glow-emerald: 0 0 20px rgba(16, 185, 129, 0.3);
+  --glow-cyan: 0 0 20px rgba(6, 182, 212, 0.3);
+  --glow-text: 0 0 10px rgba(250, 250, 250, 0.1);
+
+  /* shadcn/ui variables - Deep Green Dark Theme */
+  --background: 160 30% 1%;
+  /* #020402 - Deep Forest Black */
+  --foreground: 160 10% 98%;
+  --muted: 160 20% 10%;
+  /* #141f1a - More saturated green-gray */
+  --muted-foreground: 160 10% 60%;
+  --popover: 160 25% 4%;
+  /* #080d0a - Darker green */
+  --popover-foreground: 160 10% 98%;
+  --card: 160 20% 6%;
+  /* #0c120f - Matches panel */
+  --card-foreground: 160 10% 98%;
+  --border: 160 20% 15%;
+  /* #1e2e26 - Greenish border */
+  --input: 160 20% 15%;
+  --primary: 160 10% 98%;
+  --primary-foreground: 160 30% 5%;
+  --secondary: 160 20% 10%;
+  --secondary-foreground: 160 10% 98%;
+  --accent: 160 25% 10%;
+  --accent-foreground: 160 10% 98%;
+  --destructive: 0 63% 31%;
+  --destructive-foreground: 0 0% 98%;
+  --ring: 142 71% 45%;
+  --radius: 0.75rem;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============ Custom Scrollbar ============ */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.5);
+}
+
+/* ============ Text Selection ============ */
+::selection {
+  background: rgba(16, 185, 129, 0.3);
+  color: white;
+}
+
+/* ============ Focus Ring (Accessibility) ============ */
+*:focus-visible {
+  outline: 2px solid var(--color-accent-emerald);
+  outline-offset: 2px;
+}
+
+/* ============ Reduced Motion ============ */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============ Animation Utilities ============ */
+@layer utilities {
+  .animation-delay-100 {
+    animation-delay: 100ms;
+  }
+
+  .animation-delay-200 {
+    animation-delay: 200ms;
+  }
+
+  .animation-delay-300 {
+    animation-delay: 300ms;
+  }
+
+  .animation-delay-400 {
+    animation-delay: 400ms;
+  }
+}
+
+/* ============ Glow Effects (MASTER.md: Minimal Glow) ============ */
+.glow-emerald {
+  box-shadow: var(--glow-emerald);
+}
+
+.glow-cyan {
+  box-shadow: var(--glow-cyan);
+}
+
+.glow-text {
+  text-shadow: var(--glow-text);
+}
+
+/* ============ Glass Effect ============ */
+.glass {
+  backdrop-filter: blur(12px);
+  background: rgba(24, 24, 27, 0.8);
+  border: 1px solid rgba(63, 63, 70, 0.5);
+}
+
+/* ============ Gradient Borders ============ */
+.gradient-border {
+  position: relative;
+}
+
+.gradient-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, #10B981, #06B6D4, #10B981);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* ============ Shimmer Loading ============ */
+.shimmer {
+  background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(250, 250, 250, 0.05) 50%,
+      transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ============ Custom Layout Classes ============ */
+@layer utilities {
+
+  /* Font families (MASTER.md) */
+  .font-heading {
+    font-family: 'Fredoka', sans-serif;
+  }
+
+  .font-body {
+    font-family: 'Nunito', sans-serif;
+  }
+
+  /* Alias for backward compat */
+  .font-display {
+    font-family: 'Fredoka', sans-serif;
+  }
+
+  .font-mono {
+    font-family: 'Fredoka', sans-serif;
+    font-weight: 500;
+  }
+
+  /* Surface Colors */
+  .bg-surface {
+    background-color: var(--color-surface);
+  }
+
+  .bg-surface-hover {
+    background-color: var(--color-surface-hover);
+  }
+
+  /* Text */
+  .text-primary {
+    color: var(--color-text);
+  }
+
+  .text-muted {
+    color: var(--color-muted);
+  }
+
+  /* Border */
+  .border-default {
+    border-color: var(--color-border);
+  }
+}
+
+/* ============ Button Styles (MASTER.md) ============ */
+@layer components {
+  .btn-primary {
+    @apply bg-[#F8FAFC] text-[#18181B] px-6 py-3 rounded-lg font-semibold transition-all duration-200 cursor-pointer;
+  }
+
+  .btn-primary:hover {
+    @apply opacity-90 -translate-y-0.5;
+  }
+
+  .btn-secondary {
+    @apply bg-transparent text-[#FAFAFA] border-2 border-[#3F3F46] px-6 py-3 rounded-lg font-semibold transition-all duration-200 cursor-pointer;
+  }
+
+  .btn-secondary:hover {
+    @apply bg-[#27272A] border-[#52525B];
+  }
+
+  .btn-accent {
+    @apply bg-[#10B981] text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200 cursor-pointer shadow-lg;
+    box-shadow: var(--glow-emerald);
+  }
+
+  .btn-accent:hover {
+    @apply bg-[#059669] -translate-y-0.5;
+  }
+}
+
+/* ============ Card Styles (MASTER.md) ============ */
+@layer components {
+  .card {
+    @apply bg-[#18181B] rounded-xl p-6 border border-[#3F3F46] transition-all duration-200 cursor-pointer;
+  }
+
+  .card:hover {
+    @apply -translate-y-0.5 border-[#52525B];
+    box-shadow: var(--shadow-lg);
+  }
+}
+
+/* ============ Input Styles (MASTER.md) ============ */
+@layer components {
+  .input {
+    @apply w-full px-4 py-3 bg-[#18181B] border border-[#3F3F46] rounded-lg text-[#FAFAFA] transition-all duration-200 focus:outline-none;
+  }
+
+  .input:focus {
+    @apply border-[#10B981];
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+  }
+
+  .input::placeholder {
+    @apply text-[#71717A];
+  }
+}

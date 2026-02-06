@@ -1,0 +1,47 @@
+# FastAPI
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy>=2.0.30
+psycopg2-binary>=2.9.9
+alembic>=1.13.1
+
+# Async
+celery==5.3.4
+redis==5.0.1
+
+# Validation
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
+
+# Storage
+minio==7.2.3
+python-magic==0.4.27
+
+# Auth
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# HTTP Client
+httpx==0.26.0
+aiofiles==23.2.1
+
+# Image Processing
+Pillow>=10.4.0
+cairosvg>=2.7.1
+opencv-python>=4.8.0
+
+# Face Recognition (可选，用于角色一致性)
+# insightface>=0.7.3  # 需要 Python 3.11/3.12，Python 3.13 可能不兼容
+# onnxruntime>=1.16.0
+numpy>=1.24.0
+
+# Utils
+python-dotenv==1.0.0
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+httpx==0.26.0

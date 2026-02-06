@@ -1,0 +1,187 @@
+{
+    "name": "flux_inpaint",
+    "version": "1.0.0",
+    "description": "Flux 局部重绘 (Inpaint)",
+    "nodes": {
+        "1": {
+            "inputs": {
+                "unet_name": "flux1-dev.safetensors",
+                "weight_dtype": "default"
+            },
+            "class_type": "UNETLoader"
+        },
+        "2": {
+            "inputs": {
+                "clip_name1": "t5xxl_fp8_e4m3fn.safetensors",
+                "clip_name2": "clip_l.safetensors",
+                "type": "flux"
+            },
+            "class_type": "DualCLIPLoader"
+        },
+        "3": {
+            "inputs": {
+                "vae_name": "ae.safetensors"
+            },
+            "class_type": "VAELoader"
+        },
+        "10": {
+            "inputs": {
+                "image": "{{source_image}}"
+            },
+            "class_type": "LoadImage",
+            "_meta": {
+                "title": "Load Source Image"
+            }
+        },
+        "11": {
+            "inputs": {
+                "image": "{{mask_image}}"
+            },
+            "class_type": "LoadImage",
+            "_meta": {
+                "title": "Load Mask"
+            }
+        },
+        "12": {
+            "inputs": {
+                "pixels": [
+                    "10",
+                    0
+                ],
+                "vae": [
+                    "3",
+                    0
+                ]
+            },
+            "class_type": "VAEEncode",
+            "_meta": {
+                "title": "Encode Source"
+            }
+        },
+        "13": {
+            "inputs": {
+                "samples": [
+                    "12",
+                    0
+                ],
+                "mask": [
+                    "11",
+                    0
+                ],
+                "grow_mask_by": "{{grow_mask}}"
+            },
+            "class_type": "SetLatentNoiseMask",
+            "_meta": {
+                "title": "Set Inpaint Mask"
+            }
+        },
+        "4": {
+            "inputs": {
+                "text": "{{positive_prompt}}",
+                "clip": [
+                    "2",
+                    0
+                ]
+            },
+            "class_type": "CLIPTextEncode"
+        },
+        "6": {
+            "inputs": {
+                "noise": [
+                    "7",
+                    0
+                ],
+                "guider": [
+                    "8",
+                    0
+                ],
+                "sampler": [
+                    "9",
+                    0
+                ],
+                "sigmas": [
+                    "14",
+                    0
+                ],
+                "latent_image": [
+                    "13",
+                    0
+                ]
+            },
+            "class_type": "SamplerCustomAdvanced"
+        },
+        "7": {
+            "inputs": {
+                "noise_seed": "{{seed}}"
+            },
+            "class_type": "RandomNoise"
+        },
+        "8": {
+            "inputs": {
+                "model": [
+                    "1",
+                    0
+                ],
+                "conditioning": [
+                    "4",
+                    0
+                ]
+            },
+            "class_type": "BasicGuider"
+        },
+        "9": {
+            "inputs": {
+                "sampler_name": "{{sampler}}"
+            },
+            "class_type": "KSamplerSelect"
+        },
+        "14": {
+            "inputs": {
+                "scheduler": "{{scheduler}}",
+                "steps": "{{steps}}",
+                "denoise": "{{denoise}}",
+                "model": [
+                    "1",
+                    0
+                ]
+            },
+            "class_type": "BasicScheduler"
+        },
+        "15": {
+            "inputs": {
+                "samples": [
+                    "6",
+                    0
+                ],
+                "vae": [
+                    "3",
+                    0
+                ]
+            },
+            "class_type": "VAEDecode"
+        },
+        "16": {
+            "inputs": {
+                "filename_prefix": "webtoon/inpaint",
+                "images": [
+                    "15",
+                    0
+                ]
+            },
+            "class_type": "SaveImage"
+        }
+    },
+    "defaults": {
+        "positive_prompt": "masterpiece, best quality",
+        "width": 1080,
+        "height": 1920,
+        "seed": 42,
+        "steps": 20,
+        "sampler": "euler",
+        "scheduler": "normal",
+        "denoise": 0.8,
+        "grow_mask": 8,
+        "source_image": "",
+        "mask_image": ""
+    }
+}

@@ -1,0 +1,8 @@
+﻿src/components/params-panel/ParamsPanel.tsx(111,42): error TS2345: Argument of type '{ id: string; name: string; icon: string; values: { lineart: number; color: number; screentone: number; texture: number; }; } | { id: string; name: string; icon: string; values: { emotion: number; action: number; exaggeration: number; }; } | { ...; }' is not assignable to parameter of type '{ id: string; name: string; icon: string; values: { lineart: number; color: number; screentone: number; texture: number; }; }'.
+  Type '{ id: string; name: string; icon: string; values: { emotion: number; action: number; exaggeration: number; }; }' is not assignable to type '{ id: string; name: string; icon: string; values: { lineart: number; color: number; screentone: number; texture: number; }; }'.
+    Types of property 'values' are incompatible.
+      Type '{ emotion: number; action: number; exaggeration: number; }' is missing the following properties from type '{ lineart: number; color: number; screentone: number; texture: number; }': lineart, color, screentone, texture
+src/components/studio/modals/BatchModal.tsx(11,26): error TS2307: Cannot find module '@/components/ui/progress' or its corresponding type declarations.
+src/components/studio/modals/TemplateModal.tsx(12,44): error TS2307: Cannot find module '@/components/ui/radio-group' or its corresponding type declarations.
+src/components/studio/modals/TemplateModal.tsx(147,84): error TS7006: Parameter 'v' implicitly has an 'any' type.
+src/components/studio/right/AnalyticsPanel.tsx(9,26): error TS2307: Cannot find module '@/components/ui/progress' or its corresponding type declarations.

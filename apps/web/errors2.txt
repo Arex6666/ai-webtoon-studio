@@ -1,0 +1,6 @@
+﻿src/components/params-panel/ParamsPanel.tsx(111,42): error TS2345: Argument of type '{ id: string; name: string; icon: string; values: { lineart: number; color: number; screentone: number; texture: number; }; } | { id: string; name: string; icon: string; values: { emotion: number; action: number; exaggeration: number; }; } | { ...; }' is not assignable to parameter of type '{ id: string; name: string; icon: string; values: { lineart: number; color: number; screentone: number; texture: number; }; }'.
+  Type '{ id: string; name: string; icon: string; values: { emotion: number; action: number; exaggeration: number; }; }' is not assignable to type '{ id: string; name: string; icon: string; values: { lineart: number; color: number; screentone: number; texture: number; }; }'.
+    Types of property 'values' are incompatible.
+      Type '{ emotion: number; action: number; exaggeration: number; }' is missing the following properties from type '{ lineart: number; color: number; screentone: number; texture: number; }': lineart, color, screentone, texture
+src/components/studio/StudioLayout.tsx(3,17): error TS2724: '"react-resizable-panels"' has no exported member named 'PanelGroup'. Did you mean 'PanelProps'?
+src/components/studio/StudioLayout.tsx(3,29): error TS2305: Module '"react-resizable-panels"' has no exported member 'PanelResizeHandle'.
