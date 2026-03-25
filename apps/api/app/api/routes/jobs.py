@@ -2,7 +2,7 @@
 统一任务路由 - Jobs API (使用 Celery)
 支持 image_job, anchor_job, video_job, export_job
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
@@ -10,6 +10,9 @@ from datetime import datetime
 from enum import Enum
 import uuid
 import logging
+
+from app.schemas.job_schemas import JobCreateRequest, JobStatusResponse as UnifiedJobResponse
+from app.celery_app import celery_app
 
 from app.db.database import get_db
 from app.models import Job, Panel, Chapter, Clip, Timeline
@@ -140,6 +143,59 @@ def job_to_response(job: Job) -> JobStatusResponse:
 
 
 # ============ Routes ============
+
+@router.post("/", response_model=UnifiedJobResponse)
+async def create_unified_job(
+    req: JobCreateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Unified job creation — single entry point for all job types."""
+    target_field_map = {
+        "image": "panel_id",
+        "video": "clip_id",
+        "storyboard": "chapter_id",
+        "export": "chapter_id",
+    }
+    target_field = target_field_map.get(req.type)
+    if not target_field:
+        raise HTTPException(status_code=400, detail=f"Unknown job type: {req.type}")
+
+    job = create_job_record(
+        db=db,
+        job_type=req.type,
+        provider=req.provider,
+        inputs=req.params,
+        **{target_field: req.target_id},
+    )
+
+    TASK_MAP = {
+        "image": ("app.workers.image_worker.execute_image_job", "image", [job.id, req.target_id]),
+        "video": ("app.workers.video_worker.execute_video_job", "video", [job.id, req.target_id]),
+        "export": ("app.workers.export_worker.execute_export_job", "export", [job.id, req.target_id]),
+    }
+    if req.type in TASK_MAP:
+        task_name, queue, args = TASK_MAP[req.type]
+        celery_app.send_task(task_name, args=args, queue=queue)
+    elif req.type == "storyboard":
+        from app.api.routes.chapters import run_storyboard_task
+        background_tasks.add_task(
+            run_storyboard_task,
+            job_id=job.id,
+            chapter_id=req.target_id,
+            script=req.params.get("script", ""),
+            provider=req.provider,
+        )
+
+    return UnifiedJobResponse(
+        job_id=job.id,
+        type=job.type,
+        status=job.status,
+        progress=job.progress or 0.0,
+        created_at=job.created_at.isoformat() if job.created_at else None,
+        updated_at=job.updated_at.isoformat() if job.updated_at else None,
+    )
+
 
 @router.post("/image", response_model=JobResponse)
 async def create_image_job(
