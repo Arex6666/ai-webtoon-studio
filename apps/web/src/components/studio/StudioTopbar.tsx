@@ -17,8 +17,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Save, Play, Download, Upload, ChevronDown, Zap, Sparkles, ArrowLeft, Wand2 } from "lucide-react"
+import { Save, Play, Download, Upload, ChevronDown, Zap, Sparkles, ArrowLeft, Wand2, Film, Loader2 } from "lucide-react"
 import { useStudioStore } from '@/lib/store/studioStore'
+import { useShallow } from 'zustand/react/shallow'
 import { useToast } from '@/hooks/use-toast'
 import { ImportModal } from './modals/ImportModal'
 import { BatchRenderButton } from './controls/BatchRenderButton'
@@ -52,13 +53,15 @@ export function StudioTopbar({ projectId, chapterId, projectName, chapterTitle }
     script,
     setPanelList,
     selectPanel,
-    // S3-08: Assets lock state
     canRender,
     pendingAssetsCount,
-  } = useStudioStore()
+  } = useStudioStore(
+    useShallow(s => ({ saveChapterDraft: s.saveChapterDraft, exportChapterSpec: s.exportChapterSpec, enqueueRender: s.enqueueRender, selectedPanelId: s.selectedPanelId, panelList: s.panelList, script: s.script, setPanelList: s.setPanelList, selectPanel: s.selectPanel, canRender: s.canRender, pendingAssetsCount: s.pendingAssetsCount }))
+  )
   const { toast } = useToast()
   const [showImportModal, setShowImportModal] = useState(false)
   const [selectedProvider, setSelectedProvider] = useState<RenderProvider>('mock')
+  const [batchVideoRunning, setBatchVideoRunning] = useState(false)
   // const [isGenerating, setIsGenerating] = useState(false) // Moved to hook
 
   // 工作流状态判断
@@ -165,6 +168,44 @@ export function StudioTopbar({ projectId, chapterId, projectName, chapterTitle }
         description: error instanceof Error ? error.message : "请检查网络连接后重试",
         variant: "destructive",
       })
+    }
+  }
+
+  const handleBatchVideo = async () => {
+    const { panelList, createJob } = useStudioStore.getState()
+    const rendered = panelList.filter(p => p.status === 'Rendered')
+
+    if (rendered.length === 0) {
+      toast({ title: '无可用面板', description: '请先渲染面板图片' })
+      return
+    }
+
+    if (!confirm(`将为 ${rendered.length} 个已渲染面板生成视频，确认？`)) return
+
+    setBatchVideoRunning(true)
+    try {
+      const CONCURRENCY = 5
+      for (let i = 0; i < rendered.length; i += CONCURRENCY) {
+        const batch = rendered.slice(i, i + CONCURRENCY)
+        await Promise.allSettled(
+          batch.map(async (panel) => {
+            // Use panel.id as clip target — the backend video worker
+            // will resolve the start frame from the panel's preview
+            const clipId = panel.id
+            return createJob('video', clipId, 'doubao', {
+              start_frame_url: panel.previewUrl || '',
+              motion_prompt: panel.description || '',
+              duration_sec: 3,
+              fps: 24,
+            })
+          })
+        )
+      }
+      toast({ title: '批量视频已启动', description: `${rendered.length} 个任务已提交` })
+    } catch (e) {
+      toast({ title: '批量视频失败', description: String(e), variant: 'destructive' })
+    } finally {
+      setBatchVideoRunning(false)
     }
   }
 
@@ -345,6 +386,20 @@ export function StudioTopbar({ projectId, chapterId, projectName, chapterTitle }
                 })
               }}
             />
+          )}
+
+          {/* 批量视频：为所有已渲染面板生成视频 */}
+          {hasPanels && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
+              onClick={handleBatchVideo}
+              disabled={batchVideoRunning}
+            >
+              {batchVideoRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
+              批量视频
+            </Button>
           )}
         </div>
       </div>
