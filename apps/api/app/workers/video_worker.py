@@ -11,6 +11,7 @@ import time
 
 from app.db.database import SessionLocal
 from app.models import Job, Clip, Timeline, Panel
+from app.models.layer_pack import LayerPack
 from app.api.routes.ws import push_chapter_update
 from app.services.video.video_provider_base import (
     VideoGenerationRequest,
@@ -36,6 +37,22 @@ def push_video_update_sync(chapter_id: str, job_id: str, clip_id: str, status: s
                 "progress": progress,
             })
         )
+        # Unified event
+        from app.api.routes.ws import push_unified_job_event
+        if status in ("succeeded", "failed"):
+            loop.run_until_complete(
+                push_unified_job_event(chapter_id, "job_status", job_id, {
+                    "status": status,
+                    "type": "video",
+                })
+            )
+        else:
+            loop.run_until_complete(
+                push_unified_job_event(chapter_id, "job_progress", job_id, {
+                    "progress": progress,
+                    "message": status,
+                })
+            )
         loop.close()
     except Exception as e:
         logger.warning(f"Failed to push WS update: {e}")

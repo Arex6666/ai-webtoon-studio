@@ -34,6 +34,22 @@ def push_update_sync(chapter_id: str, job_id: str, panel_id: str, status: str, p
         loop.run_until_complete(
             push_job_update(chapter_id, job_id, panel_id, status, progress, current_step)
         )
+        # Unified event
+        from app.api.routes.ws import push_unified_job_event
+        if status in ("succeeded", "failed"):
+            loop.run_until_complete(
+                push_unified_job_event(chapter_id, "job_status", job_id, {
+                    "status": status,
+                    "type": "image",
+                })
+            )
+        else:
+            loop.run_until_complete(
+                push_unified_job_event(chapter_id, "job_progress", job_id, {
+                    "progress": progress,
+                    "message": current_step,
+                })
+            )
     except Exception as e:
         logger.warning(f"Failed to push WS update: {e}")
 

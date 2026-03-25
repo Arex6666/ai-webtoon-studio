@@ -217,6 +217,19 @@ async def push_chapter_update(
     await manager.send_to_chapter(chapter_id, message)
 
 
+async def push_unified_job_event(
+    chapter_id: str,
+    event_type: str,
+    job_id: str,
+    payload: dict,
+):
+    """Push a unified job event. event_type is one of: job_progress, job_status, job_result."""
+    await push_chapter_update(chapter_id, event_type, {
+        "jobId": job_id,
+        **payload,
+    })
+
+
 async def broadcast_to_chapter(chapter_id: str, event: dict):
     """
     推送事件到章节 (P0-CH Worker 使用)
