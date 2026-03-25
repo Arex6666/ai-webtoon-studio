@@ -1,31 +1,30 @@
 'use client'
 
 import { useStudioStore } from "@/lib/store/studioStore"
+import { useShallow } from "zustand/react/shallow"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
 import { InspectorFormProvider } from "./InspectorFormProvider"
-import { InspectorStory } from "./InspectorStory"
-import { InspectorCast } from "./InspectorCast"
-import { InspectorLayout } from "./InspectorLayout"
+import ShotTab from "./ShotTab"
+import CastTab from "./CastTab"
+import AssetsTab from "./AssetsTab"
 import { InspectorLayers } from "./InspectorLayers"
-import { InspectorTimeline } from "./InspectorTimeline"
-import { InspectorConsistency } from "./InspectorConsistency"
-import { InspectorAnchors } from "./InspectorAnchors"
-import { InspectorQA } from "./InspectorQA"
-import { AssetsLockPanel } from "../panels/AssetsLockPanel"
-import { FileText, MousePointerClick, Link } from "lucide-react"
+import VideoTab from "./VideoTab"
+import { FileText, MousePointerClick } from "lucide-react"
 
 export function InspectorTabs() {
   const {
     selectedPanelId,
     selectedClipId,
     panelList,
-    chapterId,
-    // S3-08: Assets lock state
-    pendingAssetsCount,
     activeInspectorTab,
-    canRender
-  } = useStudioStore()
+  } = useStudioStore(
+    useShallow(s => ({
+      selectedPanelId: s.selectedPanelId,
+      selectedClipId: s.selectedClipId,
+      panelList: s.panelList,
+      activeInspectorTab: s.activeInspectorTab,
+    }))
+  )
 
   // 空状态 1：没有分镜
   if (panelList.length === 0) {
@@ -59,7 +58,7 @@ export function InspectorTabs() {
     )
   }
 
-  // 空状态 2：有分镜但未选中（但 assets-lock tab 可用）
+  // 空状态 2：有分镜但未选中
   const showPanelInspector = selectedPanelId || selectedClipId
 
   // Tab 切换处理
@@ -81,65 +80,35 @@ export function InspectorTabs() {
           onValueChange={handleTabChange}
           className="flex-1 flex flex-col min-h-0"
         >
-          {/* S3-08: Tab 滚动 + AssetsLock Tab 带 badge */}
           <TabsList className="w-full justify-start rounded-none border-b border-white/5 h-10 p-0 overflow-x-auto flex-nowrap scrollbar-hide bg-muted/10">
-            <TabsTrigger value="story" className={tabClass}>镜头</TabsTrigger>
+            <TabsTrigger value="shot" className={tabClass}>镜头</TabsTrigger>
             <TabsTrigger value="cast" className={tabClass}>角色</TabsTrigger>
-            <TabsTrigger value="layout" className={tabClass}>构图</TabsTrigger>
+            <TabsTrigger value="assets" className={tabClass}>资产</TabsTrigger>
             <TabsTrigger value="layers" className={tabClass}>图层</TabsTrigger>
-            <TabsTrigger value="timeline" className={tabClass}>时间轴</TabsTrigger>
-
-            {/* S3-08: 资产锁定 Tab (带 badge) */}
-            <TabsTrigger value="assets-lock" className={`${tabClass} relative`}>
-              <Link className="w-3 h-3 mr-1" />
-              资产锁定
-              {pendingAssetsCount > 0 && (
-                <Badge
-                  variant="destructive"
-                  className="ml-1.5 h-4 min-w-[16px] px-1 text-[10px] font-medium"
-                >
-                  {pendingAssetsCount}
-                </Badge>
-              )}
-            </TabsTrigger>
-
-            <TabsTrigger value="consistency" className={tabClass}>一致性</TabsTrigger>
-            <TabsTrigger value="anchors" className={tabClass}>控制图</TabsTrigger>
-            <TabsTrigger value="qa" className={tabClass}>QA</TabsTrigger>
+            <TabsTrigger value="video" className={tabClass}>视频</TabsTrigger>
           </TabsList>
 
-          {/* 分镜相关 tabs - 需要选中分镜 */}
           {showPanelInspector ? (
             <>
-              <TabsContent value="story" className="flex-1 overflow-auto m-0">
-                <InspectorStory />
+              <TabsContent value="shot" className="flex-1 overflow-auto m-0">
+                <ShotTab />
               </TabsContent>
               <TabsContent value="cast" className="flex-1 overflow-auto m-0">
-                <InspectorCast />
+                <CastTab />
               </TabsContent>
-              <TabsContent value="layout" className="flex-1 overflow-auto m-0">
-                <InspectorLayout />
+              <TabsContent value="assets" className="flex-1 overflow-auto m-0">
+                <AssetsTab />
               </TabsContent>
               <TabsContent value="layers" className="flex-1 overflow-auto m-0">
                 <InspectorLayers />
               </TabsContent>
-              <TabsContent value="timeline" className="flex-1 overflow-auto m-0">
-                <InspectorTimeline />
-              </TabsContent>
-              <TabsContent value="consistency" className="flex-1 overflow-auto m-0">
-                <InspectorConsistency />
-              </TabsContent>
-              <TabsContent value="anchors" className="flex-1 overflow-auto m-0">
-                <InspectorAnchors />
-              </TabsContent>
-              <TabsContent value="qa" className="flex-1 overflow-auto m-0">
-                <InspectorQA />
+              <TabsContent value="video" className="flex-1 overflow-auto m-0">
+                <VideoTab />
               </TabsContent>
             </>
           ) : (
-            // 未选中分镜时的空状态（但 assets-lock 可用）
             <>
-              {['story', 'cast', 'layout', 'layers', 'timeline', 'consistency', 'anchors', 'qa'].map((tab) => (
+              {['shot', 'cast', 'assets', 'layers', 'video'].map((tab) => (
                 <TabsContent key={tab} value={tab} className="flex-1 overflow-auto m-0">
                   <div className="flex-1 flex items-center justify-center p-6">
                     <div className="text-center space-y-5 max-w-xs relative">
@@ -166,22 +135,6 @@ export function InspectorTabs() {
               ))}
             </>
           )}
-
-          {/* S3-08: AssetsLock Tab - 不需要选中分镜 */}
-          <TabsContent value="assets-lock" className="flex-1 overflow-auto m-0">
-            {chapterId ? (
-              <AssetsLockPanel
-                chapterId={chapterId}
-                onRenderReady={(ready) => {
-                  useStudioStore.setState({ canRender: ready })
-                }}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                请先选择章节
-              </div>
-            )}
-          </TabsContent>
         </Tabs>
       </div>
     </InspectorFormProvider>
