@@ -48,6 +48,8 @@ class Clip(Base, TimestampMixin):
     provider = Column(String(50), default="mock")
     motion_prompt = Column(Text, nullable=True)
     motion_mode = Column(String(50), default="single_keyframe")  # single_keyframe/dual_keyframe/image2video
+    negative = Column(Text, nullable=True)
+    seed = Column(Integer, nullable=True)
 
     # 关键帧引用
     start_frame_layerpack_id = Column(String(36), nullable=True)
