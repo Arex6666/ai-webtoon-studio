@@ -401,7 +401,7 @@ export default function VideoTab() {
               <CheckCircle2 className="w-4 h-4" />
               视频生成成功
             </div>
-            {jobState.result?.video_url && (
+            {jobState.result?.video_url != null && (
               <a
                 href={String(jobState.result.video_url)}
                 target="_blank"
