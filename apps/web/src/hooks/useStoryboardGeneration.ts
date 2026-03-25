@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useStudioStore } from '@/lib/store/studioStore'
+import { useShallow } from 'zustand/react/shallow'
 import { useToast } from '@/hooks/use-toast'
 import { chaptersApi, renderApi } from '@/lib/api/services'
 import { RenderProvider } from '@/lib/schema/job'
@@ -10,7 +11,9 @@ export function useStoryboardGeneration() {
         script,
         setPanelList,
         selectPanel,
-    } = useStudioStore()
+    } = useStudioStore(
+    useShallow(s => ({ chapterId: s.chapterId, script: s.script, setPanelList: s.setPanelList, selectPanel: s.selectPanel }))
+  )
     const { toast } = useToast()
     const [isGenerating, setIsGenerating] = useState(false)
 
@@ -32,13 +35,15 @@ export function useStoryboardGeneration() {
         })
 
         try {
-            // 调用 API 创建分镜任务
-            const result = await chaptersApi.createStoryboard(chapterId, provider)
+            // 调用统一 jobApi 创建分镜任务
+            const jobId = await useStudioStore.getState().createJob('storyboard', chapterId, provider, {
+                script: script,
+            })
 
             // 轮询 job 状态
             const pollJobStatus = async (): Promise<void> => {
                 try {
-                    const job = await renderApi.getJobStatus(result.job_id)
+                    const job = await renderApi.getJobStatus(jobId)
 
                     if (job.status === 'succeeded') {
                         // 刷新 studio 数据
