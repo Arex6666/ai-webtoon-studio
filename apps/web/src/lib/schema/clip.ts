@@ -100,23 +100,22 @@ export function createDefaultClip(
 }
 
 // 检查 Clip 是否可以生成
-export function canGenerateClip(clip: Clip): { canGenerate: boolean; reason?: string } {
+export function canGenerateClip(
+  clip: Clip,
+  panelPreviewUrl?: string,
+): { canGenerate: boolean; reason: string } {
   if (clip.status === 'Running' || clip.status === 'Queued') {
     return { canGenerate: false, reason: '正在生成中' }
   }
 
-  if (clip.motionMode === 'dual_keyframe') {
-    if (!clip.startFrame) {
-      return { canGenerate: false, reason: '请设置起始关键帧' }
-    }
-    if (!clip.endFrame) {
-      return { canGenerate: false, reason: '请设置结束关键帧' }
-    }
-  } else {
-    if (!clip.startFrame) {
-      return { canGenerate: false, reason: '请设置起始关键帧' }
-    }
+  const startFrame = clip.startFrame || panelPreviewUrl
+  if (!startFrame) {
+    return { canGenerate: false, reason: '面板尚未渲染，无法生成视频' }
   }
 
-  return { canGenerate: true }
+  if (clip.motionMode === 'dual_keyframe' && !clip.endFrame) {
+    return { canGenerate: false, reason: '双关键帧模式请设置结束帧' }
+  }
+
+  return { canGenerate: true, reason: '可以生成' }
 }
