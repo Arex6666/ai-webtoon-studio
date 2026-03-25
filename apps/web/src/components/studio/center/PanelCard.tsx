@@ -4,7 +4,9 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils/cn"
 import { useStudioStore } from "@/lib/store/studioStore"
-import { Loader2, Clock, CheckCircle, AlertCircle, FileEdit, Plus, Image as ImageIcon, Sparkles, RefreshCw } from "lucide-react"
+import { useShallow } from "zustand/react/shallow"
+import { memo } from "react"
+import { Loader2, Clock, CheckCircle, AlertCircle, FileEdit, Plus, Image as ImageIcon, Sparkles, RefreshCw, Film } from "lucide-react"
 
 interface PanelCardProps {
   panel: {
@@ -66,8 +68,10 @@ const STATUS_CONFIG = {
   },
 }
 
-export function PanelCard({ panel, selected, onClick, onDoubleClick }: PanelCardProps) {
-  const { jobs, addPanelAsClip, setStudioData, chapterId } = useStudioStore()
+export const PanelCard = memo(function PanelCard({ panel, selected, onClick, onDoubleClick }: PanelCardProps) {
+  const { jobs, addPanelAsClip, setStudioData, chapterId } = useStudioStore(
+    useShallow(s => ({ jobs: s.jobs, addPanelAsClip: s.addPanelAsClip, setStudioData: s.setStudioData, chapterId: s.chapterId }))
+  )
 
   // 查找当前面板的运行中任务以获取进度
   const activeJob = Object.values(jobs).find(
@@ -78,6 +82,7 @@ export function PanelCard({ panel, selected, onClick, onDoubleClick }: PanelCard
 
   // 渲染按钮状态
   const canRender = panel.status === 'Draft' || panel.status === 'NeedsFix'
+  const canRenderVideo = panel.status === 'Rendered'
   const renderJob = Object.values(jobs).find(job => job.panelId === panel.id && job.status === 'Running')
 
   const handleRender = async (e: React.MouseEvent) => {
@@ -262,8 +267,27 @@ export function PanelCard({ panel, selected, onClick, onDoubleClick }: PanelCard
         >
           <Plus className="w-3.5 h-3.5" />
         </Button>
+
+        {/* Video button — enabled only when panel has been rendered */}
+        <Button
+          size="icon"
+          className={cn(
+            "h-7 w-7 rounded-lg shadow-lg border-0",
+            canRenderVideo
+              ? "bg-gradient-to-br from-violet-500 to-violet-600 text-white hover:from-violet-400 hover:to-violet-500"
+              : "bg-gradient-to-br from-slate-600 to-slate-700 text-white/40 cursor-not-allowed opacity-50"
+          )}
+          disabled={!canRenderVideo}
+          onClick={(e) => {
+            e.stopPropagation()
+            useStudioStore.getState().selectPanel(panel.id)
+            useStudioStore.setState({ activeInspectorTab: 'video' })
+          }}
+          title={canRenderVideo ? "生成视频" : "需先渲染面板图"}
+        >
+          <Film className="w-3.5 h-3.5" />
+        </Button>
       </div>
     </div>
   )
-}
-
+})
