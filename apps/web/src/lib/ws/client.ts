@@ -10,6 +10,7 @@ import { VideoJob } from '../schema/videoJob'
 import { Clip } from '../schema/clip'
 import { ExportJob, ExportSpec } from '../schema/exportSpec'
 import { getRealWsClient, RealWsClient } from './realWsClient'
+import { useStudioStore } from '../store/studioStore'
 
 type EventHandler = (event: WsEvent) => void
 
@@ -47,8 +48,10 @@ export function connect(): WsConnection {
     if (USE_REAL_WEBSOCKET) {
         try {
             realWsClient = getRealWsClient()
+            useStudioStore.setState({ wsConnected: true })
         } catch (error) {
             console.warn('[WS] Failed to initialize real WebSocket, using mock:', error)
+            useStudioStore.setState({ wsConnected: false })
         }
     }
 
@@ -158,6 +161,8 @@ export function connect(): WsConnection {
                 realWsClient.disconnect()
                 realWsClient = null
             }
+
+            useStudioStore.setState({ wsConnected: false })
 
             // 取消所有 Mock 任务
             activeJobCancellers.forEach((cancel) => cancel())

@@ -94,13 +94,14 @@ interface StudioStore {
   exportJobOrder: string[]
   selectedClipId: string | null
 
-  // Unified jobs (Task 08: WS-driven, provider-agnostic)
+  // Unified jobs (Task 08/09: WS-driven, provider-agnostic)
   unifiedJobs: Record<string, {
     status: string
-    progress?: number
+    progress: number
     message?: string
     result?: Record<string, unknown>
     error?: string
+    type?: string
   }>
   wsConnected: boolean
 
@@ -161,8 +162,10 @@ interface StudioStore {
   exportChapterSpec: () => string
   importChapterSpec: (json: string) => void
 
-  // Unified job actions (Task 08)
+  // Unified job actions (Task 08/09)
+  createJob: (type: string, targetId: string, provider: string, params?: Record<string, unknown>) => Promise<string>
   updateJob: (jobId: string, patch: Partial<StudioStore['unifiedJobs'][string]>) => void
+  handleJobEvent: (event: { type: string; payload: Record<string, unknown> }) => void
 
   // Render Job actions
   enqueueRender: (panelIds: string[], provider?: RenderProvider) => void
@@ -252,10 +255,11 @@ const initialState = {
   selectedClipId: null as string | null,
   unifiedJobs: {} as Record<string, {
     status: string
-    progress?: number
+    progress: number
     message?: string
     result?: Record<string, unknown>
     error?: string
+    type?: string
   }>,
   wsConnected: false,
   isDirty: false,
@@ -508,7 +512,19 @@ export const useStudioStore = create<StudioStore>((set, get) => ({
     }
   },
 
-  // ============ Unified Job Actions (Task 08) ============
+  // ============ Unified Job Actions (Task 08/09) ============
+
+  createJob: async (type, targetId, provider, params) => {
+    const { jobApi } = await import('@/lib/api/jobApi')
+    const res = await jobApi.create({ type: type as any, target_id: targetId, provider, params })
+    set(s => ({
+      unifiedJobs: {
+        ...s.unifiedJobs,
+        [res.job_id]: { status: res.status, progress: 0, type: res.type },
+      },
+    }))
+    return res.job_id
+  },
 
   updateJob: (jobId, patch) => set(state => ({
     unifiedJobs: {
@@ -516,6 +532,26 @@ export const useStudioStore = create<StudioStore>((set, get) => ({
       [jobId]: { ...state.unifiedJobs[jobId], ...patch },
     },
   })),
+
+  handleJobEvent: (event) => {
+    const { type, payload } = event as any
+    const jobId = payload?.jobId
+    if (!jobId) return
+
+    set(s => {
+      const job = s.unifiedJobs[jobId] || { status: 'queued', progress: 0 }
+      switch (type) {
+        case 'job_progress':
+          return { unifiedJobs: { ...s.unifiedJobs, [jobId]: { ...job, progress: payload.progress, message: payload.message } } }
+        case 'job_status':
+          return { unifiedJobs: { ...s.unifiedJobs, [jobId]: { ...job, status: payload.status, error: payload.error } } }
+        case 'job_result':
+          return { unifiedJobs: { ...s.unifiedJobs, [jobId]: { ...job, result: payload.result } } }
+        default:
+          return s
+      }
+    })
+  },
 
   // ============ Render Job Actions ============
 
@@ -543,7 +579,16 @@ export const useStudioStore = create<StudioStore>((set, get) => ({
   applyWsEvent: (event) => {
     const state = get()
 
+    // Unified job event dispatch (Task 09)
+    if (event.type === 'job_progress' || event.type === 'job_status' || event.type === 'job_result') {
+      get().handleJobEvent(event as any)
+    }
+
     switch (event.type) {
+      case 'job_result':
+        // handled entirely by handleJobEvent above
+        break
+
       case 'job_created': {
         const { job } = event.payload
         set({

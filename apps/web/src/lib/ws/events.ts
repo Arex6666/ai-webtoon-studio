@@ -30,6 +30,8 @@ export type WsEventType =
     | 'storyboard_error'
     // Draft Events (Task S3-02)
     | 'storyboard_draft_ready'
+    // Unified Job Events (Task 09)
+    | 'job_result'
 
 export interface WsEventBase {
     type: WsEventType
@@ -211,6 +213,38 @@ export interface StoryboardDraftReadyEvent extends WsEventBase {
     }
 }
 
+// ============ Unified Job Events (Task 09) ============
+
+export interface UnifiedJobProgressEvent {
+  type: 'job_progress'
+  payload: {
+    jobId: string
+    progress: number
+    message?: string
+  }
+  timestamp: number
+}
+
+export interface UnifiedJobStatusEvent {
+  type: 'job_status'
+  payload: {
+    jobId: string
+    status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled'
+    type?: string
+    error?: string
+  }
+  timestamp: number
+}
+
+export interface UnifiedJobResultEvent extends WsEventBase {
+  type: 'job_result'
+  payload: {
+    jobId: string
+    type: string
+    result: Record<string, unknown>
+  }
+}
+
 export type WsEvent =
     | JobCreatedEvent
     | JobProgressEvent
@@ -231,6 +265,7 @@ export type WsEvent =
     | StoryboardDoneEvent
     | StoryboardErrorEvent
     | StoryboardDraftReadyEvent
+    | UnifiedJobResultEvent
 
 // ============ Helper Functions ============
 
