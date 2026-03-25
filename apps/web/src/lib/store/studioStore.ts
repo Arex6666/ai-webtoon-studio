@@ -94,6 +94,16 @@ interface StudioStore {
   exportJobOrder: string[]
   selectedClipId: string | null
 
+  // Unified jobs (Task 08: WS-driven, provider-agnostic)
+  unifiedJobs: Record<string, {
+    status: string
+    progress?: number
+    message?: string
+    result?: Record<string, unknown>
+    error?: string
+  }>
+  wsConnected: boolean
+
   // UI state
   isDirty: boolean
 
@@ -150,6 +160,9 @@ interface StudioStore {
   saveChapterDraft: () => void
   exportChapterSpec: () => string
   importChapterSpec: (json: string) => void
+
+  // Unified job actions (Task 08)
+  updateJob: (jobId: string, patch: Partial<StudioStore['unifiedJobs'][string]>) => void
 
   // Render Job actions
   enqueueRender: (panelIds: string[], provider?: RenderProvider) => void
@@ -237,6 +250,14 @@ const initialState = {
   exportJobs: {} as Record<string, ExportJob>,
   exportJobOrder: [] as string[],
   selectedClipId: null as string | null,
+  unifiedJobs: {} as Record<string, {
+    status: string
+    progress?: number
+    message?: string
+    result?: Record<string, unknown>
+    error?: string
+  }>,
+  wsConnected: false,
   isDirty: false,
   script: '',
   storyboardJob: null as StoryboardJobState | null,
@@ -486,6 +507,15 @@ export const useStudioStore = create<StudioStore>((set, get) => ({
       characterCount: spec.characters.length,
     }
   },
+
+  // ============ Unified Job Actions (Task 08) ============
+
+  updateJob: (jobId, patch) => set(state => ({
+    unifiedJobs: {
+      ...state.unifiedJobs,
+      [jobId]: { ...state.unifiedJobs[jobId], ...patch },
+    },
+  })),
 
   // ============ Render Job Actions ============
 
