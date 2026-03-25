@@ -485,11 +485,20 @@ async def generate_asset_image(
             if "reference_images" not in data:
                 data["reference_images"] = []
             data["reference_images"].append(result["image_url"])
-            if result.get("embedding_path"):
-                data["embedding_path"] = result["embedding_path"]
-                data["embedding_status"] = "ready"
-                data["embedding_source"] = "auto_generation"
-                data["face_embedding"] = result["embedding_path"]  # backwards compat
+            try:
+                if result.get("embedding_path"):
+                    data["embedding_path"] = result["embedding_path"]
+                    data["embedding_status"] = "ready"
+                    data["embedding_source"] = "auto_generation"
+                    data["face_embedding"] = result["embedding_path"]  # backwards compat
+                else:
+                    # No face detected in the generated image — don't block image gen
+                    data["embedding_status"] = "failed"
+                    data["embedding_error"] = "No face detected in generated image"
+            except Exception as emb_exc:
+                # FaceID extraction failed — image generation still succeeds
+                data["embedding_status"] = "failed"
+                data["embedding_error"] = str(emb_exc)
             asset.data_json = data
             asset.thumbnail_url = result["image_url"]
             db.commit()
