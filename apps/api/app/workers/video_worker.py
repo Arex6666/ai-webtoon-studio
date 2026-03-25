@@ -102,24 +102,45 @@ def execute_video_job(self, job_id: str, clip_id: str):
         
         push_video_update_sync(chapter_id, job_id, clip_id, "running", 0)
         
+        # Read params from job.inputs_json first, fall back to clip model fields
+        params = job.inputs_json or {}
+
+        # Resolve start_frame_url: job params → clip layerpack → clip.start_frame → panel preview
+        start_frame_url = params.get("start_frame_url")
+        if not start_frame_url and hasattr(clip, 'start_frame_layerpack_id') and clip.start_frame_layerpack_id:
+            lp = db.query(LayerPack).filter(LayerPack.id == clip.start_frame_layerpack_id).first()
+            if lp:
+                start_frame_url = lp.full_url
+        if not start_frame_url:
+            # Fall back to existing helper which checks clip.start_frame and panel spec
+            start_frame_url = get_start_frame_url(panel, clip)
+
+        end_frame_url = params.get("end_frame_url")
+        if not end_frame_url:
+            end_frame_url = get_end_frame_url(panel, clip) if clip.motion_mode == "dual_keyframe" else None
+
+        if not start_frame_url:
+            raise ValueError("No start frame available for video generation")
+
+        # Resolve other params with fallback to clip model fields
+        motion_prompt = params.get("motion_prompt") or getattr(clip, 'motion_prompt', '') or ''
+        negative_prompt = params.get("negative") or getattr(clip, 'negative', '') or ''
+        duration_sec = params.get("duration_sec") or getattr(clip, 'duration_sec', 3.0) or 3.0
+        fps = params.get("fps") or getattr(clip, 'fps', 24) or 24
+        seed = params.get("seed") or getattr(clip, 'seed', None)
+        provider_name = params.get("provider") or job.provider or getattr(clip, 'provider', 'mock') or 'mock'
+
         # 确定 Provider
-        provider_name = getattr(clip, 'provider', 'mock') or 'mock'
         provider = get_video_provider(provider_name)
-        
+
         logger.info(f"[VideoWorker] Using provider: {provider_name}, available: {list_providers()}")
-        
+
         # 如果找不到对应 Provider，回退到 Mock
         if provider is None:
             logger.warning(f"[VideoWorker] Provider '{provider_name}' not found, falling back to mock")
             return execute_mock_job(db, job, clip, chapter_id, job_id, clip_id)
-        
+
         # 准备生成请求
-        start_frame_url = get_start_frame_url(panel, clip)
-        end_frame_url = get_end_frame_url(panel, clip) if clip.motion_mode == "dual_keyframe" else None
-        
-        if not start_frame_url:
-            raise ValueError("No start frame available for video generation")
-        
         request = VideoGenerationRequest(
             clip_id=clip_id,
             panel_id=clip.panel_id,
@@ -127,13 +148,13 @@ def execute_video_job(self, job_id: str, clip_id: str):
             chapter_id=chapter_id,
             start_frame_url=start_frame_url,
             end_frame_url=end_frame_url,
-            prompt=getattr(clip, 'motion_prompt', '') or '',
-            negative_prompt=getattr(clip, 'negative', '') or '',
-            duration_sec=clip.duration_sec or 3.0,
-            fps=clip.fps or 24,
+            prompt=motion_prompt,
+            negative_prompt=negative_prompt,
+            duration_sec=duration_sec,
+            fps=fps,
             width=1080,
             height=1920,
-            seed=getattr(clip, 'seed', None),
+            seed=seed,
         )
         
         # 进度回调
