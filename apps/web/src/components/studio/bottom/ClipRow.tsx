@@ -31,6 +31,8 @@ import {
 import { Clip, ClipStatus, canGenerateClip } from "@/lib/schema/clip"
 import { Provider, providerLabels } from "@/lib/schema/provider"
 import { useStudioStore } from "@/lib/store/studioStore"
+import { useShallow } from "zustand/react/shallow"
+import { memo } from "react"
 
 interface ClipRowProps {
   clip: Clip
@@ -47,28 +49,57 @@ const statusConfig: Record<ClipStatus, { label: string; variant: 'default' | 'se
   Failed: { label: '失败', variant: 'destructive' },
 }
 
-export function ClipRow({ clip, index, isFirst, isLast }: ClipRowProps) {
+export const ClipRow = memo(function ClipRow({ clip, index, isFirst, isLast }: ClipRowProps) {
   const {
     updateClip,
     removeClip,
     reorderClip,
-    enqueueClipRender,
-    retryClipRender,
+    createJob,
     selectClip,
     selectPanel,
     selectedClipId,
     panelSpecs,
-  } = useStudioStore()
+    unifiedJobs,
+  } = useStudioStore(
+    useShallow(s => ({
+      updateClip: s.updateClip,
+      removeClip: s.removeClip,
+      reorderClip: s.reorderClip,
+      createJob: s.createJob,
+      selectClip: s.selectClip,
+      selectPanel: s.selectPanel,
+      selectedClipId: s.selectedClipId,
+      panelSpecs: s.panelSpecs,
+      unifiedJobs: s.unifiedJobs,
+    }))
+  )
 
   const isSelected = selectedClipId === clip.id
   const panelSpec = panelSpecs[clip.panelId]
   const panelTitle = panelSpec?.scene?.location || `Panel ${clip.panelId}`
-  const status = statusConfig[clip.status]
-  const isRunning = clip.status === 'Running' || clip.status === 'Queued'
+
+  // Prefer live unified job state when available, fall back to clip fields
+  const unifiedJob = unifiedJobs[clip.id]
+  const liveStatus = unifiedJob
+    ? (unifiedJob.status as ClipStatus)
+    : clip.status
+  const liveProgress = unifiedJob ? unifiedJob.progress : clip.progress
+
+  const status = statusConfig[liveStatus] ?? statusConfig[clip.status]
+  const isRunning = liveStatus === 'Running' || liveStatus === 'Queued'
+
+  const handleGenerate = async () => {
+    updateClip(clip.id, { status: 'Queued', progress: 0 })
+    await createJob('video', clip.id, clip.provider, {
+      durationSec: clip.durationSec,
+      fps: clip.fps,
+      motionPrompt: clip.motionPrompt,
+    })
+  }
 
   // 使用 canGenerateClip 验证
   const { canGenerate, reason } = canGenerateClip(clip)
-  const showGenerateButton = clip.status === 'Idle' || clip.status === 'Failed'
+  const showGenerateButton = liveStatus === 'Idle' || liveStatus === 'Failed'
 
   return (
     <div
@@ -162,9 +193,9 @@ export function ClipRow({ clip, index, isFirst, isLast }: ClipRowProps) {
       {/* 状态 & 进度 */}
       <div className="w-20 flex items-center gap-1">
         <Badge variant={status.variant} className="text-xs h-5">
-          {clip.status === 'Running' && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-          {clip.status === 'Succeeded' && <Check className="w-3 h-3 mr-1" />}
-          {clip.status === 'Failed' && <X className="w-3 h-3 mr-1" />}
+          {liveStatus === 'Running' && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+          {liveStatus === 'Succeeded' && <Check className="w-3 h-3 mr-1" />}
+          {liveStatus === 'Failed' && <X className="w-3 h-3 mr-1" />}
           {status.label}
         </Badge>
       </div>
@@ -174,7 +205,7 @@ export function ClipRow({ clip, index, isFirst, isLast }: ClipRowProps) {
         <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
           <div
             className="h-full bg-accent transition-all"
-            style={{ width: `${clip.progress * 100}%` }}
+            style={{ width: `${liveProgress * 100}%` }}
           />
         </div>
       )}
@@ -194,7 +225,7 @@ export function ClipRow({ clip, index, isFirst, isLast }: ClipRowProps) {
                     onClick={(e) => {
                       e.stopPropagation()
                       if (canGenerate) {
-                        enqueueClipRender(clip.id)
+                        handleGenerate()
                       }
                     }}
                   >
@@ -215,14 +246,14 @@ export function ClipRow({ clip, index, isFirst, isLast }: ClipRowProps) {
           </TooltipProvider>
         )}
 
-        {clip.status === 'Failed' && (
+        {liveStatus === 'Failed' && (
           <Button
             size="sm"
             variant="outline"
             className="h-6 px-2 text-xs"
             onClick={(e) => {
               e.stopPropagation()
-              retryClipRender(clip.id)
+              handleGenerate()
             }}
           >
             <RefreshCw className="w-3 h-3 mr-1" />
@@ -283,4 +314,4 @@ export function ClipRow({ clip, index, isFirst, isLast }: ClipRowProps) {
       </div>
     </div>
   )
-}
+})

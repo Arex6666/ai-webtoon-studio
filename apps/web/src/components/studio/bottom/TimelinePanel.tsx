@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select"
 import { Download, Film, Clock } from "lucide-react"
 import { useStudioStore } from "@/lib/store/studioStore"
+import { useShallow } from "zustand/react/shallow"
 import { calculateTotalDuration } from "@/lib/schema/timeline"
 import { ClipRow } from "./ClipRow"
 
@@ -22,7 +23,9 @@ export function TimelinePanel() {
     updateTimelineSettings,
     enqueueExport,
     buildExportSpec,
-  } = useStudioStore()
+  } = useStudioStore(
+    useShallow(s => ({ projectId: s.projectId, chapterId: s.chapterId, timelineByChapter: s.timelineByChapter, updateTimelineSettings: s.updateTimelineSettings, enqueueExport: s.enqueueExport, buildExportSpec: s.buildExportSpec }))
+  )
 
   const key = projectId && chapterId ? `${projectId}:${chapterId}` : null
   const timeline = key ? timelineByChapter[key] : null
