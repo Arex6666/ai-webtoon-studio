@@ -436,12 +436,20 @@ export default function EpisodeConversationPage() {
 
         if (panels.length === 0) return
 
+        // Build per-panel duration map from script data
+        const panelDurations: Record<number, number> = {}
+        const panelsWithImages = scriptData.panels.filter(p => panelImages[p.id])
+        panelsWithImages.forEach((p, i) => {
+            if (p.duration_sec) panelDurations[i] = p.duration_sec
+        })
+
         const initialData: VideoCardData = {
             phase: 'select',
             panels,
             selectedIndices: panels.map(p => p.index),
             motionPrompt: scriptData.panels[0]?.camera_movement || '缓慢推进，镜头微微摇动',
-            durationSec: scriptData.panels[0]?.duration_sec || 5,
+            durationSec: 5,
+            panelDurations: Object.keys(panelDurations).length > 0 ? panelDurations : undefined,
             jobs: [],
         }
         videoCardDataRef.current = initialData
