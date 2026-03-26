@@ -469,6 +469,33 @@ class EpisodeScriptResponse(BaseModel):
     panels: list[StoryboardPanel]
 
 
+# ============ 分镜首帧生成 API ============
+
+class PanelInput(BaseModel):
+    id: str
+    scene_name: str = ""
+    scene_description: str
+    composition: str = ""
+    camera_movement: str = ""
+    characters: list[str] = []
+
+class GeneratePanelsRequest(BaseModel):
+    project_id: str
+    art_style: ArtStyle
+    characters: list[Character]
+    scenes: list[Scene]
+    panels: list[PanelInput]
+
+class PanelResult(BaseModel):
+    id: str
+    image_url: Optional[str] = None
+    status: str  # "success" | "failed"
+    error: Optional[str] = None
+
+class GeneratePanelsResponse(BaseModel):
+    panels: list[PanelResult]
+
+
 @router.post("/episode/{episode_number}/script", response_model=EpisodeScriptResponse)
 async def generate_full_episode_script(
     episode_number: int,
@@ -701,3 +728,62 @@ async def generate_full_episode_script(
         # Include error class name for easier debugging even in production
         detail = f"{type(e).__name__}: {e}" if settings.DEBUG else f"Episode script generation failed ({type(e).__name__})"
         raise HTTPException(status_code=500, detail=detail)
+
+
+@router.post("/episode/{episode_number}/generate-panels", response_model=GeneratePanelsResponse)
+async def generate_panel_images(
+    episode_number: int,
+    req: GeneratePanelsRequest,
+):
+    """用户确认角色/场景后，为每个分镜生成首帧图。"""
+    provider = get_doubao_image_provider()
+    if not provider:
+        raise HTTPException(status_code=503, detail="Image provider not available (no API key configured)")
+
+    # 构建查找表
+    char_prompt_map = {c.name: c.visual_prompt for c in req.characters if c.visual_prompt}
+    scene_prompt_map = {s.name: s.visual_prompt for s in req.scenes if s.visual_prompt}
+    art_style_hint = f"{req.art_style.base_style}, {req.art_style.color_tone}, {req.art_style.atmosphere}"
+
+    semaphore = asyncio.Semaphore(5)
+
+    async def generate_one(panel: PanelInput) -> PanelResult:
+        async with semaphore:
+            try:
+                scene_part = scene_prompt_map.get(panel.scene_name, panel.scene_name or "")
+                char_parts = [char_prompt_map.get(cn, cn) for cn in panel.characters]
+                char_part = ", ".join(char_parts) if char_parts else ""
+
+                parts = [
+                    art_style_hint,
+                    scene_part,
+                    char_part,
+                    panel.scene_description,
+                    panel.composition,
+                    "high quality, detailed, anime illustration",
+                ]
+                prompt = ", ".join(p for p in parts if p)
+
+                request = DoubaoImageRequest(
+                    prompt=prompt,
+                    negative_prompt="low quality, blurry, distorted, deformed, ugly, text, watermark",
+                    width=1280,
+                    height=720,
+                )
+                result = await provider.generate(request)
+                if result.success and result.image_url:
+                    return PanelResult(id=panel.id, image_url=result.image_url, status="success")
+                return PanelResult(id=panel.id, status="failed", error=result.error or "Generation returned no image")
+            except Exception as e:
+                logger.warning(f"[Episode {episode_number}] Panel '{panel.id}' image failed: {e}")
+                return PanelResult(id=panel.id, status="failed", error=str(e))
+
+    results = await asyncio.gather(*[generate_one(p) for p in req.panels], return_exceptions=True)
+    panel_results = []
+    for i, r in enumerate(results):
+        if isinstance(r, PanelResult):
+            panel_results.append(r)
+        else:
+            panel_results.append(PanelResult(id=req.panels[i].id, status="failed", error=str(r)))
+
+    return GeneratePanelsResponse(panels=panel_results)
