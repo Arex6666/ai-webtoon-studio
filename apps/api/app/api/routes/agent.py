@@ -787,3 +787,80 @@ async def generate_panel_images(
             panel_results.append(PanelResult(id=req.panels[i].id, status="failed", error=str(r)))
 
     return GeneratePanelsResponse(panels=panel_results)
+
+
+# ============ 对话式改进 API ============
+
+class RefineRequest(BaseModel):
+    phase: str  # "confirm" | "panels" | "video"
+    message: str
+    current_data: dict  # { art_style, characters, scenes, panels }
+
+class RefineResponse(BaseModel):
+    action: str  # "update_character" | "update_scene" | "update_panel" | "update_art_style" | "add_scene" | "remove_scene" | "add_panel" | "remove_panel" | "chat"
+    updates: Optional[dict] = None  # partial updates
+    affected_panels: list[str] = []  # panel IDs that need re-rendering
+    reply: str  # natural language reply to user
+
+
+@router.post("/episode/{episode_number}/refine", response_model=RefineResponse)
+async def refine_episode(
+    episode_number: int,
+    req: RefineRequest,
+):
+    """通过对话改进剧本内容（角色/场景/分镜/风格）。"""
+    llm = StandardLLMService()
+
+    system_prompt = f"""你是AI漫剧导演助手。用户正在编辑第{episode_number}集的分镜剧本，当前处于 {req.phase} 阶段。
+
+当前剧本数据（JSON）：
+{json.dumps(req.current_data, ensure_ascii=False, indent=2)[:8000]}
+
+用户发来一条修改指令，请分析意图并返回结构化的修改结果。
+
+返回JSON格式：
+{{
+  "action": "update_character | update_scene | update_panel | update_art_style | add_scene | remove_scene | add_panel | remove_panel | chat",
+  "updates": {{
+    "characters": [修改后的角色对象（只包含被修改的角色）],
+    "scenes": [修改后的场景对象（只包含被修改的场景）],
+    "panels": [修改后的分镜对象（只包含被修改的分镜）],
+    "art_style": {{修改后的风格对象（如果修改了风格）}}
+  }},
+  "affected_panels": ["02-1", "02-3"],
+  "reply": "自然语言回复，告诉用户做了什么修改"
+}}
+
+规则：
+1. updates 中只包含被修改的项目，未修改的不要包含
+2. 被修改的角色/场景需要同步更新 visual_prompt（英文）
+3. 如果修改了角色外观或场景描述，设置 "regenerate_image": true
+4. affected_panels 列出包含被修改角色/场景的分镜ID
+5. 如果用户只是闲聊或提问，action 设为 "chat"，updates 为 null
+6. reply 用中文回复
+只返回JSON，不要添加任何额外文字。"""
+
+    try:
+        content = await llm._chat_completion(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": req.message},
+            ],
+            response_format="json",
+        )
+        data = _safe_json_loads(content)
+
+        return RefineResponse(
+            action=data.get("action", "chat"),
+            updates=data.get("updates"),
+            affected_panels=data.get("affected_panels", []),
+            reply=data.get("reply", "已收到你的反馈。"),
+        )
+    except Exception as e:
+        logger.error(f"Refine failed: {e}", exc_info=True)
+        return RefineResponse(
+            action="chat",
+            updates=None,
+            affected_panels=[],
+            reply=f"抱歉，处理你的请求时出错了：{str(e)}",
+        )
