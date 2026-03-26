@@ -423,11 +423,14 @@ class EpisodeScriptRequest(BaseModel):
 
 class StoryboardPanel(BaseModel):
     id: str
+    scene_name: str = ""
     scene_description: str
     composition: str
     camera_movement: str
+    characters: list[str] = []
     voice_character: str
     dialogue: str
+    duration_sec: float = 5.0  # LLM-specified duration (3-10 seconds)
 
 
 class Highlight(BaseModel):
@@ -532,7 +535,8 @@ async def generate_full_episode_script(
       "camera_movement": "运镜调度（固定镜头/推/拉/摇/跟）",
       "characters": ["角色名1", "角色名2"],
       "voice_character": "配音角色（旁白/角色名）",
-      "dialogue": "台词内容"
+      "dialogue": "台词内容",
+      "duration_sec": 5
     }}
   ]
 }}
@@ -543,6 +547,11 @@ async def generate_full_episode_script(
 3. panels 中用 time_of_day 和 weather 字段表示场景变体
 
 分镜数量：12-24格
+每个分镜需要指定 duration_sec（3-10秒），根据画面内容和节奏调整：
+- 对话场景：4-6秒
+- 动作场景：3-4秒
+- 情感特写：5-7秒
+- 全景建立镜头：6-8秒
 风格要求：韩漫二次元、都市情感、镜头语言细腻
 只返回JSON，不要添加任何额外文字或markdown标记。
 """
@@ -598,78 +607,75 @@ async def generate_full_episode_script(
         panels = [
             StoryboardPanel(
                 id=p.get("id", f"{str(episode_number).zfill(2)}-{i+1}"),
+                scene_name=p.get("scene_name", ""),
                 scene_description=p.get("scene_description", ""),
                 composition=p.get("composition", ""),
                 camera_movement=p.get("camera_movement", ""),
+                characters=p.get("characters", []),
                 voice_character=p.get("voice_character", ""),
-                dialogue=p.get("dialogue", "")
+                dialogue=p.get("dialogue", ""),
+                duration_sec=max(3.0, min(10.0, float(p.get("duration_sec", 5.0)))),
             )
             for i, p in enumerate(data.get("panels", []))
         ]
 
-        # =========== 豆包 Seedream 生图：为角色和场景生成参考图 ===========
+        # =========== 生成角色参考图 + 场景参考图 ===========
+        art_style_hint = f"{art_style.base_style}, {art_style.color_tone}, {art_style.atmosphere}"
+
         provider = get_doubao_image_provider()
         if provider:
-            logger.info(f"[Episode {episode_number}] Starting image generation for {len(characters)} characters, {len(scenes)} scenes")
-            
+            logger.info(f"[Episode {episode_number}] Generating character and scene images")
+            semaphore = asyncio.Semaphore(5)
+
             async def generate_character_image(char: Character) -> Character:
-                """为角色生成参考图"""
-                if not char.visual_prompt:
+                """生成角色半身参考图"""
+                async with semaphore:
+                    try:
+                        prompt = f"{art_style_hint}, {char.visual_prompt}, character portrait, upper body, anime style, detailed face, high quality"
+                        request = DoubaoImageRequest(
+                            prompt=prompt,
+                            negative_prompt="low quality, blurry, distorted, deformed, full body, background clutter",
+                            width=1024,
+                            height=1280,
+                        )
+                        result = await provider.generate(request)
+                        if result.success and result.image_url:
+                            char.image_url = result.image_url
+                            logger.info(f"[Episode {episode_number}] Character '{char.name}' image generated")
+                    except Exception as e:
+                        logger.warning(f"[Episode {episode_number}] Failed to generate image for character '{char.name}': {e}")
                     return char
-                try:
-                    prompt = f"portrait, {char.visual_prompt}, solo character, detailed face, anime style, high quality"
-                    request = DoubaoImageRequest(
-                        prompt=prompt,
-                        negative_prompt="low quality, blurry, distorted, multiple people",
-                        width=1024,
-                        height=1024,
-                    )
-                    result = await provider.generate(request)
-                    if result.success and result.image_url:
-                        char.image_url = result.image_url
-                        logger.info(f"[Episode {episode_number}] Character '{char.name}' image generated")
-                except Exception as e:
-                    logger.warning(f"[Episode {episode_number}] Failed to generate image for character '{char.name}': {e}")
-                return char
-            
+
             async def generate_scene_image(scene: Scene) -> Scene:
-                """为场景生成参考图"""
-                if not scene.visual_prompt:
+                """生成场景全景参考图"""
+                async with semaphore:
+                    try:
+                        prompt = f"{art_style_hint}, {scene.visual_prompt}, wide shot, background art, no characters, environment concept art, high quality"
+                        request = DoubaoImageRequest(
+                            prompt=prompt,
+                            negative_prompt="low quality, blurry, distorted, people, characters, figures",
+                            width=1920,
+                            height=1080,
+                        )
+                        result = await provider.generate(request)
+                        if result.success and result.image_url:
+                            scene.image_url = result.image_url
+                            logger.info(f"[Episode {episode_number}] Scene '{scene.name}' image generated")
+                    except Exception as e:
+                        logger.warning(f"[Episode {episode_number}] Failed to generate image for scene '{scene.name}': {e}")
                     return scene
-                try:
-                    prompt = f"{scene.visual_prompt}, background, detailed environment, no people, anime style, high quality"
-                    request = DoubaoImageRequest(
-                        prompt=prompt,
-                        negative_prompt="low quality, blurry, people, characters, person",
-                        width=1280,
-                        height=720,
-                    )
-                    result = await provider.generate(request)
-                    if result.success and result.image_url:
-                        scene.image_url = result.image_url
-                        logger.info(f"[Episode {episode_number}] Scene '{scene.name}' image generated")
-                except Exception as e:
-                    logger.warning(f"[Episode {episode_number}] Failed to generate image for scene '{scene.name}': {e}")
-                return scene
-            
-            # 并行生成所有图片
+
+            # 并行生成角色图和场景图
             char_tasks = [generate_character_image(c) for c in characters]
             scene_tasks = [generate_scene_image(s) for s in scenes]
-            
             all_results = await asyncio.gather(*char_tasks, *scene_tasks, return_exceptions=True)
-            
-            # 更新 characters 和 scenes - 注意先保存原始长度
-            char_count = len(char_tasks)
-            updated_chars = [r for r in all_results[:char_count] if isinstance(r, Character)]
-            updated_scenes = [r for r in all_results[char_count:] if isinstance(r, Scene)]
-            
-            # 只有成功更新的才替换
-            if updated_chars:
-                characters = updated_chars
-            if updated_scenes:
-                scenes = updated_scenes
-            
-            logger.info(f"[Episode {episode_number}] Image generation completed")
+
+            # 提取结果（忽略异常）
+            char_count = len(characters)
+            characters = [r for r in all_results[:char_count] if isinstance(r, Character)] or characters
+            scenes = [r for r in all_results[char_count:] if isinstance(r, Scene)] or scenes
+
+            logger.info(f"[Episode {episode_number}] Character and scene image generation completed")
         else:
             logger.info(f"[Episode {episode_number}] DoubaoImageProvider not available, skipping image generation")
 
@@ -686,8 +692,12 @@ async def generate_full_episode_script(
 
     except HTTPException:
         raise
+    except ValueError as e:
+        # Config errors (missing API key, empty base_url) — always show detail
+        logger.error(f"Agent episode script config error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         logger.error(f"Agent episode script generation failed: {e}", exc_info=True)
-        if settings.DEBUG:
-            raise HTTPException(status_code=500, detail=str(e))
-        raise HTTPException(status_code=500, detail="Episode script generation failed")
+        # Include error class name for easier debugging even in production
+        detail = f"{type(e).__name__}: {e}" if settings.DEBUG else f"Episode script generation failed ({type(e).__name__})"
+        raise HTTPException(status_code=500, detail=detail)
