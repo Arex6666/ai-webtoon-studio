@@ -4,12 +4,12 @@ import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
     Bot, User, Send, Sparkles, FileText, Image as ImageIcon,
-    Layers, Eye, Check, RotateCcw, ExternalLink, Loader2, AtSign, Trash2, ArrowRight
+    Layers, Eye, Check, RotateCcw, ExternalLink, Loader2, AtSign, Trash2, ArrowRight, Film
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MarkdownContent } from '@/components/ui/MarkdownContent'
 
-export type CardType = 'outline' | 'script' | 'storyboard' | 'asset'
+export type CardType = 'outline' | 'script' | 'storyboard' | 'asset' | 'video' | 'episode_pipeline'
 export type MessageRole = 'user' | 'assistant' | 'system'
 
 export interface ActionCard {
@@ -25,6 +25,11 @@ export interface ActionCard {
         icon: React.ElementType
         variant: 'primary' | 'secondary' | 'ghost'
     }[]
+    /** Episode pipeline fields (type='episode_pipeline') */
+    phase?: string
+    script_data?: any
+    panel_images?: Record<string, string>
+    video_jobs?: any[]
 }
 
 export interface AgentMessage {
@@ -33,6 +38,8 @@ export interface AgentMessage {
     content: string
     timestamp: number
     card?: ActionCard
+    /** Custom React node rendered below the message bubble (e.g. VideoCard) */
+    customContent?: React.ReactNode
 }
 
 interface AgentChatProps {
@@ -51,6 +58,8 @@ const cardTypeConfig = {
     script: { icon: FileText, color: 'text-[#3B82F6]', bg: 'bg-[#3B82F6]/10', border: 'border-[#3B82F6]/30', label: '剧本' },
     storyboard: { icon: Layers, color: 'text-[#8B5CF6]', bg: 'bg-[#8B5CF6]/10', border: 'border-[#8B5CF6]/30', label: '分镜' },
     asset: { icon: ImageIcon, color: 'text-[#F59E0B]', bg: 'bg-[#F59E0B]/10', border: 'border-[#F59E0B]/30', label: '资产' },
+    video: { icon: Film, color: 'text-[#06B6D4]', bg: 'bg-[#06B6D4]/10', border: 'border-[#06B6D4]/30', label: '视频' },
+    episode_pipeline: { icon: Film, color: 'text-[#06B6D4]', bg: 'bg-[#06B6D4]/10', border: 'border-[#06B6D4]/30', label: '管线' },
 }
 
 function ActionCardComponent({ card, onAction }: { card: ActionCard; onAction: (actionId: string) => void }) {
@@ -127,6 +136,7 @@ function ActionCardComponent({ card, onAction }: { card: ActionCard; onAction: (
 export function AgentChat({ messages, onSendMessage, onCardAction, onDeleteMessage, isTyping, showEpisodesButton, onGoToEpisodes }: AgentChatProps) {
     const [input, setInput] = useState('')
     const [showMentions, setShowMentions] = useState(false)
+    const [inputHovered, setInputHovered] = useState(false)
     const scrollRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -134,7 +144,7 @@ export function AgentChat({ messages, onSendMessage, onCardAction, onDeleteMessa
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight
         }
-    }, [messages, isTyping])
+    }, [messages, isTyping, inputHovered])
 
     const handleSend = () => {
         if (!input.trim() || isTyping) return
@@ -151,9 +161,9 @@ export function AgentChat({ messages, onSendMessage, onCardAction, onDeleteMessa
     const mentions = ['@第1格', '@第2格', '@第3格', '@林知夏', '@雨夜旧书店', '@红色围巾']
 
     return (
-        <div className="flex flex-col h-full bg-[#000000]">
-            {/* Header */}
-            <div className="h-14 flex items-center justify-between px-4 border-b border-[#27272A] bg-[#0C0C0C]/80 backdrop-blur-sm">
+        <div className="flex flex-col h-full bg-[#000000] relative">
+            {/* Header - auto-hide, show on hover over this area */}
+            <div className="absolute top-0 left-0 right-0 z-20 h-14 flex items-center justify-between px-4 border-b border-[#27272A] bg-[#0C0C0C]/90 backdrop-blur-md opacity-0 hover:opacity-100 transition-opacity duration-300">
                 <div className="flex items-center gap-3">
                     <motion.div
                         whileHover={{ scale: 1.05 }}
@@ -190,7 +200,10 @@ export function AgentChat({ messages, onSendMessage, onCardAction, onDeleteMessa
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={scrollRef}>
+            <div
+                className="flex-1 overflow-y-auto p-4 space-y-4"
+                ref={scrollRef}
+            >
                 {messages.length === 0 && (
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
@@ -250,6 +263,8 @@ export function AgentChat({ messages, onSendMessage, onCardAction, onDeleteMessa
                                         onAction={(actionId) => onCardAction(msg.card!.id, actionId)}
                                     />
                                 )}
+
+                                {msg.customContent}
                             </div>
 
                             {/* Delete button - shown on hover */}
@@ -289,8 +304,22 @@ export function AgentChat({ messages, onSendMessage, onCardAction, onDeleteMessa
                 )}
             </div>
 
-            {/* Input Area */}
-            <div className="p-4 border-t border-[#27272A] bg-[#0C0C0C]/50">
+            {/* Input Area - hover zone at bottom triggers expand */}
+            <div
+                className="relative"
+                onMouseEnter={() => setInputHovered(true)}
+                onMouseLeave={() => setInputHovered(false)}
+            >
+                {/* Invisible hover trigger zone - always present */}
+                {!inputHovered && (
+                    <div className="h-6 w-full" />
+                )}
+
+                {/* Actual input area - shown when hovered */}
+                <div className={cn(
+                    'overflow-hidden transition-all duration-300 border-t border-[#27272A] bg-[#0C0C0C]/95 backdrop-blur-md',
+                    inputHovered ? 'max-h-[300px] opacity-100 p-4' : 'max-h-0 opacity-0 p-0'
+                )}>
                 {/* Mention Suggestions */}
                 <AnimatePresence>
                     {showMentions && (
@@ -351,6 +380,7 @@ export function AgentChat({ messages, onSendMessage, onCardAction, onDeleteMessa
                             {isTyping ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                         </motion.button>
                     </div>
+                </div>
                 </div>
             </div>
         </div>
