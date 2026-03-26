@@ -2,13 +2,21 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Loader2, ArrowLeft, Sparkles, FileText, Palette, Users, MapPin, Film } from 'lucide-react'
+import { Loader2, ArrowLeft, Sparkles, FileText, Film } from 'lucide-react'
 import Link from 'next/link'
 
 import { AgentChat, AgentMessage } from '@/components/agent/AgentChat'
-import { conversationsApi, projectsApi } from '@/lib/api'
-import { env } from '@/lib/utils/env'
+import { VideoCard, VideoCardData, PanelImage } from '@/components/agent/VideoCard'
+import { conversationsApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
+import {
+    EpisodeScriptData,
+    generateEpisodeScript,
+    generatePanelImages,
+    refineEpisode,
+} from '@/lib/api/episodeApi'
+
+type EpisodePhase = 'loading' | 'script' | 'confirm' | 'panels' | 'video' | 'done'
 
 export default function EpisodeConversationPage() {
     const params = useParams()
@@ -16,17 +24,25 @@ export default function EpisodeConversationPage() {
     const projectId = params.projectId as string
     const episodeNum = parseInt(params.episodeNum as string)
 
+    // Core state
     const [messages, setMessages] = useState<AgentMessage[]>([])
     const [isTyping, setIsTyping] = useState(false)
     const [conversationId, setConversationId] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [outlineContext, setOutlineContext] = useState<string>('')
-    const [scriptGenerated, setScriptGenerated] = useState(false)
 
+    // Phase pipeline state
+    const [phase, setPhase] = useState<EpisodePhase>('loading')
+    const [scriptData, setScriptData] = useState<EpisodeScriptData | null>(null)
+    const [panelImages, setPanelImages] = useState<Record<string, string>>({})
+    const [panelProgress, setPanelProgress] = useState<{ done: number; total: number } | null>(null)
+    const [generationError, setGenerationError] = useState<string | null>(null)
+
+    const videoCardDataRef = useRef<VideoCardData | null>(null)
     const loadStartedRef = useRef(false)
     const hasAutoTriggered = useRef(false)
 
-    // 加载对话历史和上下文
+    // ─── Load conversation history and context ───
     useEffect(() => {
         if (loadStartedRef.current) return
         loadStartedRef.current = true
@@ -35,58 +51,62 @@ export default function EpisodeConversationPage() {
             try {
                 console.log(`[Episode ${episodeNum}] Loading conversation...`)
 
-                // 1. 从主对话获取大纲上下文
+                // 1. Get outline context from main conversation
                 const conversations = await conversationsApi.listByProject(projectId, 20, 0)
-
                 if (conversations && conversations.length > 0) {
-                    // 找到主对话（没有 episode_number 且消息最多的）
-                    const mainConvs = conversations.filter(c => !c.episode_number)
+                    const mainConvs = conversations.filter((c: any) => !c.episode_number)
                     if (mainConvs.length > 0) {
-                        const mainConv = mainConvs.reduce((best, conv) =>
+                        const mainConv = mainConvs.reduce((best: any, conv: any) =>
                             (conv.message_count > best.message_count) ? conv : best
                             , mainConvs[0])
-
-                        // 获取主对话消息作为上下文
                         const mainMessages = await conversationsApi.getMessages(mainConv.id, 100, 0)
-
-                        // 提取大纲内容
-                        const outlineMsg = mainMessages?.find(m => m.entities_json?.card?.type === 'outline')
+                        const outlineMsg = mainMessages?.find((m: any) => m.entities_json?.card?.type === 'outline')
                         if (outlineMsg) {
                             setOutlineContext(outlineMsg.content)
                         }
                     }
                 }
 
-                // 2. 获取或创建分集对话（持久化）
+                // 2. Get or create episode conversation
                 const episodeConv = await conversationsApi.getOrCreateEpisode(projectId, episodeNum)
                 setConversationId(episodeConv.id)
-                console.log(`[Episode ${episodeNum}] Got episode conversation:`, episodeConv.id,
-                    `(${episodeConv.message_count} messages)`)
 
-                // 3. 加载分集对话的历史消息
+                // 3. Load history and restore phase
                 if (episodeConv.message_count > 0) {
                     const episodeMessages = await conversationsApi.getMessages(episodeConv.id, 100, 0)
                     if (episodeMessages && episodeMessages.length > 0) {
-                        console.log(`[Episode ${episodeNum}] Loading ${episodeMessages.length} history messages`)
-
-                        // 转换为 AgentMessage 格式
-                        const historyMessages: AgentMessage[] = episodeMessages.map((msg, idx) => ({
+                        const historyMessages: AgentMessage[] = episodeMessages.map((msg: any, idx: number) => ({
                             id: msg.id || `history-${idx}`,
                             role: msg.role as 'user' | 'assistant' | 'system',
                             content: msg.content,
                             timestamp: new Date(msg.created_at).getTime(),
-                            card: msg.entities_json?.card,
+                            card: msg.entities_json?.card || msg.entities_json,
                         }))
 
                         setMessages(historyMessages)
 
-                        // 如果历史中已有剧本，标记为已生成
-                        const hasScript = historyMessages.some(m =>
-                            m.card?.type === 'script' || m.content.includes('分镜')
+                        // Restore phase from last pipeline message
+                        const pipelineMsg = [...historyMessages].reverse().find(m =>
+                            m.card?.type === 'episode_pipeline'
                         )
-                        if (hasScript) {
-                            setScriptGenerated(true)
+                        if (pipelineMsg?.card) {
+                            const savedPhase = pipelineMsg.card.phase as EpisodePhase
+                            setPhase(savedPhase)
+                            if (pipelineMsg.card.script_data) {
+                                setScriptData(pipelineMsg.card.script_data)
+                            }
+                            if (pipelineMsg.card.panel_images) {
+                                setPanelImages(pipelineMsg.card.panel_images)
+                            }
                             hasAutoTriggered.current = true
+                        } else {
+                            // Check for stale mock data
+                            const hasMockData = historyMessages.some(m =>
+                                m.content.includes('主角A') && m.content.includes('场景环境描述')
+                            )
+                            if (hasMockData) {
+                                setMessages([])
+                            }
                         }
                     }
                 }
@@ -100,7 +120,7 @@ export default function EpisodeConversationPage() {
         loadEpisodeConversation()
     }, [projectId, episodeNum])
 
-    // 保存消息
+    // ─── Save message helper ───
     const saveMessage = useCallback(async (
         role: 'user' | 'assistant' | 'system',
         content: string,
@@ -114,26 +134,30 @@ export default function EpisodeConversationPage() {
         }
     }, [conversationId])
 
-    // 自动触发剧本生成
+    // ─── Auto-trigger script generation ───
     useEffect(() => {
         if (
             !hasAutoTriggered.current &&
             !isLoading &&
             conversationId &&
             outlineContext &&
-            messages.length === 0
+            phase === 'loading'
         ) {
             hasAutoTriggered.current = true
+            setPhase('script')
             handleGenerateScript()
         }
-    }, [isLoading, conversationId, outlineContext, messages.length])
+    }, [isLoading, conversationId, outlineContext, phase])
 
-    // 生成完整剧本
+    // ─── Phase 1: Generate script + character/scene images ───
     const handleGenerateScript = async () => {
+        setGenerationError(null)
+        setPhase('script')
+
         const welcomeMsg: AgentMessage = {
             id: 'welcome',
             role: 'assistant',
-            content: `你好！我是 **Arex**。现在让我为你创作**第${episodeNum}集**的完整分镜剧本...\n\n正在分析大纲内容，生成故事梗概、剧本亮点、美术风格、角色设定、场景列表和详细分镜...`,
+            content: `你好！我是 **Arex**。正在为你创作**第${episodeNum}集**的完整分镜剧本...\n\n正在分析大纲，生成剧本、角色图和场景图...`,
             timestamp: Date.now(),
         }
         setMessages([welcomeMsg])
@@ -142,83 +166,135 @@ export default function EpisodeConversationPage() {
         setIsTyping(true)
 
         try {
-            // 调用后端生成完整剧本
-            const resp = await fetch(`${env.API_BASE_URL}/api/v1/agent/episode/${episodeNum}/script`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    project_id: projectId,
-                    episode_number: episodeNum,
-                    outline_text: outlineContext,
-                }),
-            })
+            const data = await generateEpisodeScript(projectId, episodeNum, outlineContext)
+            setScriptData(data)
 
-            if (!resp.ok) {
-                // 如果API不存在，使用模拟数据
-                const mockScript = generateMockScript(episodeNum)
-                displayScriptResult(mockScript)
-                return
+            const scriptContent = formatScriptAsMarkdown(data)
+            const scriptMsg: AgentMessage = {
+                id: 'script',
+                role: 'assistant',
+                content: scriptContent,
+                timestamp: Date.now(),
             }
+            setMessages(prev => [...prev, scriptMsg])
+            setPhase('confirm')
 
-            const data = await resp.json()
-            displayScriptResult(data)
-        } catch (e) {
-            // 使用模拟数据
-            const mockScript = generateMockScript(episodeNum)
-            displayScriptResult(mockScript)
+            // Persist pipeline state
+            await saveMessage('assistant', scriptContent, {
+                type: 'episode_pipeline',
+                phase: 'confirm',
+                script_data: data,
+            })
+        } catch (e: any) {
+            console.error(`[Episode ${episodeNum}] Script generation failed:`, e)
+            const isTimeout = e.name === 'AbortError'
+            const errorText = isTimeout ? 'LLM 请求超时（超过3分钟）' : (e.message || '网络错误')
+            setGenerationError(errorText)
+
+            const errorMsg: AgentMessage = {
+                id: 'error-' + Date.now(),
+                role: 'assistant',
+                content: isTimeout
+                    ? `剧本生成超时，LLM 处理时间超过了3分钟。\n\n请点击下方按钮重试。`
+                    : `剧本生成失败：**${errorText}**\n\n请检查后端配置后点击下方按钮重试。`,
+                timestamp: Date.now(),
+            }
+            setMessages(prev => [...prev, errorMsg])
         } finally {
             setIsTyping(false)
         }
     }
 
-    // 生成模拟剧本（临时）
-    function generateMockScript(epNum: number) {
-        return {
-            storySummary: `第${epNum}集的内容梗概将基于您的大纲自动生成。故事将延续前集的情感线，进一步发展角色关系。`,
-            highlights: [
-                { title: '亮点1', description: '情感转折点 - 关键对话场景' },
-                { title: '亮点2', description: '视觉高光 - 唯美氛围营造' },
-                { title: '亮点3', description: '情绪升华 - 内心独白与特写' },
-            ],
-            artStyle: {
-                baseStyle: '韩漫二次元',
-                colorTone: '柔和温暖的复古色彩',
-                atmosphere: '细腻唯美，注重情感表达',
-            },
-            characters: [
-                { name: '主角A', description: '外貌与服装描述' },
-                { name: '主角B', description: '外貌与服装描述' },
-            ],
-            scenes: [
-                { name: '场景1', description: '场景环境描述' },
-                { name: '场景2', description: '场景环境描述' },
-            ],
-            panels: [
-                { id: `${epNum.toString().padStart(2, '0')}-1`, scene: '画面描述', composition: '构图设计', camera: '运镜调度', voice: '旁白', dialogue: '台词内容' },
-                { id: `${epNum.toString().padStart(2, '0')}-2`, scene: '画面描述', composition: '构图设计', camera: '运镜调度', voice: '角色', dialogue: '台词内容' },
-            ],
-        }
-    }
+    // ─── Phase 2→3: Confirm assets and generate panel first frames ───
+    const handleConfirmAssets = async () => {
+        if (!scriptData) return
+        setPhase('panels')
+        setGenerationError(null)
 
-    // 显示剧本结果
-    function displayScriptResult(script: any) {
-        const scriptContent = formatScriptAsMarkdown(script)
-
-        const scriptMsg: AgentMessage = {
-            id: 'script',
+        const progressMsg: AgentMessage = {
+            id: 'panel-progress',
             role: 'assistant',
-            content: scriptContent,
+            content: `正在生成分镜首帧... (0/${scriptData.panels.length})`,
             timestamp: Date.now(),
         }
+        setMessages(prev => [...prev, progressMsg])
+        setIsTyping(true)
+        setPanelProgress({ done: 0, total: scriptData.panels.length })
 
-        setMessages(prev => [...prev, scriptMsg])
-        saveMessage('assistant', scriptContent, { type: 'episode_script', episode: episodeNum })
-        setScriptGenerated(true)
+        try {
+            const result = await generatePanelImages(episodeNum, {
+                project_id: projectId,
+                art_style: scriptData.art_style,
+                characters: scriptData.characters,
+                scenes: scriptData.scenes,
+                panels: scriptData.panels.map(p => ({
+                    id: p.id,
+                    scene_name: p.scene_name,
+                    scene_description: p.scene_description,
+                    composition: p.composition,
+                    camera_movement: p.camera_movement,
+                    characters: p.characters,
+                })),
+            })
+
+            // Collect results
+            const images: Record<string, string> = {}
+            const failed: string[] = []
+            for (const pr of result.panels) {
+                if (pr.status === 'success' && pr.image_url) {
+                    images[pr.id] = pr.image_url
+                } else {
+                    failed.push(pr.id)
+                }
+            }
+            setPanelImages(images)
+
+            const successCount = Object.keys(images).length
+            const resultContent = failed.length === 0
+                ? `分镜首帧全部生成完成！共 **${successCount}** 张。\n\n可以点击下方按钮生成视频，或通过对话调整分镜内容。`
+                : `分镜首帧生成完成：**${successCount}** 张成功，**${failed.length}** 张失败（${failed.join(', ')}）。\n\n你可以说"重新生成 ${failed[0]}"来重试，或直接生成视频。`
+
+            // Update script markdown with panel images
+            const updatedMarkdown = formatScriptAsMarkdown(scriptData, images)
+            setMessages(prev => [
+                ...prev.filter(m => m.id !== 'panel-progress').map(m =>
+                    m.id === 'script' ? { ...m, content: updatedMarkdown } : m
+                ),
+                {
+                    id: 'panel-result',
+                    role: 'assistant' as const,
+                    content: resultContent,
+                    timestamp: Date.now(),
+                },
+            ])
+
+            const nextPhase = failed.length === 0 ? 'video' : 'panels'
+            setPhase(nextPhase)
+
+            // Persist
+            await saveMessage('assistant', resultContent, {
+                type: 'episode_pipeline',
+                phase: nextPhase,
+                script_data: scriptData,
+                panel_images: images,
+            })
+        } catch (e: any) {
+            setGenerationError(e.message || '分镜首帧生成失败')
+            const errorMsg: AgentMessage = {
+                id: 'panel-error',
+                role: 'assistant',
+                content: `分镜首帧生成失败：**${e.message}**\n\n请点击下方按钮重试。`,
+                timestamp: Date.now(),
+            }
+            setMessages(prev => prev.filter(m => m.id !== 'panel-progress').concat(errorMsg))
+        } finally {
+            setIsTyping(false)
+            setPanelProgress(null)
+        }
     }
 
-    // 将剧本格式化为 Markdown
-    function formatScriptAsMarkdown(script: any): string {
-        // 支持 snake_case (API) 和 camelCase (mock) 格式
+    // ─── Format script as Markdown ───
+    function formatScriptAsMarkdown(script: any, images?: Record<string, string>): string {
         const title = script.episode_title || script.episodeTitle || `第${episodeNum}集`
         const summary = script.story_summary || script.storySummary || '暂无梗概'
         const artStyle = script.art_style || script.artStyle || {}
@@ -243,7 +319,6 @@ export default function EpisodeConversationPage() {
             md += `## 👥 角色列表\n\n`
             script.characters.forEach((c: any) => {
                 md += `### ${c.name || '未命名角色'}\n`
-                // 显示生成的角色图片
                 const imageUrl = c.image_url || c.imageUrl
                 if (imageUrl) {
                     md += `![${c.name}角色图](${imageUrl})\n\n`
@@ -261,7 +336,6 @@ export default function EpisodeConversationPage() {
             md += `## 🗺️ 场景列表\n\n`
             script.scenes.forEach((s: any) => {
                 md += `### ${s.name || '未命名场景'}\n`
-                // 显示生成的场景图片
                 const imageUrl = s.image_url || s.imageUrl
                 if (imageUrl) {
                     md += `![${s.name}场景图](${imageUrl})\n\n`
@@ -281,14 +355,26 @@ export default function EpisodeConversationPage() {
 
             script.panels.forEach((p: any) => {
                 md += `### 分镜 ${p.id}\n\n`
+
+                const imgUrl = images?.[p.id] || p.image_url || p.imageUrl
+                if (imgUrl) {
+                    md += `![分镜${p.id}](${imgUrl})\n\n`
+                }
+
                 const sceneDesc = p.scene_description || p.scene || ''
+                const sceneName = p.scene_name || p.sceneName || ''
                 const cameraMove = p.camera_movement || p.camera || ''
                 const voiceChar = p.voice_character || p.voice || ''
+                const chars = p.characters || []
+                const duration = p.duration_sec || p.durationSec || 5
 
                 md += `| 属性 | 内容 |\n|------|------|\n`
+                if (sceneName) md += `| **场景** | ${sceneName} |\n`
+                if (chars.length > 0) md += `| **角色** | ${chars.join('、')} |\n`
                 md += `| **画面描述** | ${sceneDesc} |\n`
                 md += `| **构图设计** | ${p.composition || ''} |\n`
                 md += `| **运镜调度** | ${cameraMove} |\n`
+                md += `| **时长** | ${duration}秒 |\n`
                 md += `| **配音角色** | ${voiceChar} |\n`
                 md += `| **台词内容** | ${p.dialogue || ''} |\n\n`
             })
@@ -297,6 +383,89 @@ export default function EpisodeConversationPage() {
         return md
     }
 
+    // ─── Compose keywords ───
+    const COMPOSE_KEYWORDS = ['合成视频', '合成', '拼接视频', '拼接', '合并视频', '合并']
+    const isComposeIntent = (text: string) => COMPOSE_KEYWORDS.some(kw => text.includes(kw))
+
+    // ─── VideoCard callbacks ───
+    const handleVideoDataChange = useCallback((newData: VideoCardData) => {
+        videoCardDataRef.current = newData
+        if (newData.phase === 'done') {
+            setPhase('done')
+        }
+        setMessages(prev => prev.map(msg => {
+            if (msg.id === 'video-card-msg') {
+                return {
+                    ...msg,
+                    customContent: (
+                        <VideoCard
+                            data={newData}
+                            projectId={projectId}
+                            episodeNum={episodeNum}
+                            onDataChange={handleVideoDataChange}
+                            onCompose={handleCompose}
+                        />
+                    )
+                }
+            }
+            return msg
+        }))
+    }, [projectId, episodeNum])
+
+    const handleCompose = useCallback((videoUrls: string[]) => {
+        const composeMsg: AgentMessage = {
+            id: 'compose-' + Date.now(),
+            role: 'assistant',
+            content: `正在合成 **${videoUrls.length}** 个分镜视频…\n\n> 合成功能需要后端 FFmpeg 服务支持。视频链接：\n${videoUrls.map((u, i) => `> ${i + 1}. [分镜视频 ${i + 1}](${u})`).join('\n')}`,
+            timestamp: Date.now(),
+        }
+        setMessages(prev => [...prev, composeMsg])
+        saveMessage('assistant', composeMsg.content)
+    }, [saveMessage])
+
+    // ─── Start video generation ───
+    const handleStartVideoGeneration = () => {
+        if (!scriptData) return
+        const panels: PanelImage[] = scriptData.panels
+            .filter(p => panelImages[p.id])
+            .map((p, i) => ({
+                index: i,
+                url: panelImages[p.id],
+                label: `分镜 ${p.id}`,
+            }))
+
+        if (panels.length === 0) return
+
+        const initialData: VideoCardData = {
+            phase: 'select',
+            panels,
+            selectedIndices: panels.map(p => p.index),
+            motionPrompt: scriptData.panels[0]?.camera_movement || '缓慢推进，镜头微微摇动',
+            durationSec: scriptData.panels[0]?.duration_sec || 5,
+            jobs: [],
+        }
+        videoCardDataRef.current = initialData
+
+        const videoMsg: AgentMessage = {
+            id: 'video-card-msg',
+            role: 'assistant',
+            content: `分镜首帧已就绪，共 **${panels.length}** 张。请选择要生成视频的分镜，调整参数后点击开始。`,
+            timestamp: Date.now(),
+            customContent: (
+                <VideoCard
+                    data={initialData}
+                    projectId={projectId}
+                    episodeNum={episodeNum}
+                    onDataChange={handleVideoDataChange}
+                    onCompose={handleCompose}
+                />
+            ),
+        }
+        setMessages(prev => [...prev, videoMsg])
+        setPhase('video')
+    }
+
+    // ─── Handle user messages (route through refine or video) ───
     const handleSendMessage = async (content: string) => {
         const userMsg: AgentMessage = {
             id: Date.now().toString(),
@@ -307,22 +476,125 @@ export default function EpisodeConversationPage() {
         setMessages(prev => [...prev, userMsg])
         await saveMessage('user', content)
 
-        setIsTyping(true)
+        // Conversational refinement (confirm / panels / video phases)
+        if (scriptData && (phase === 'confirm' || phase === 'panels' || phase === 'video' || phase === 'done')) {
+            // Compose intent shortcut
+            if (isComposeIntent(content) && phase === 'done') {
+                const data = videoCardDataRef.current
+                if (data?.phase === 'done') {
+                    const urls = data.jobs.filter(j => j.status === 'succeeded' && j.video_url).map(j => j.video_url!)
+                    if (urls.length >= 2) {
+                        handleCompose(urls)
+                        return
+                    }
+                }
+            }
 
-        // 简单的回复
-        setTimeout(async () => {
-            const aiContent = '收到你的反馈！我会根据你的意见调整剧本内容。请告诉我具体需要修改哪些部分：故事梗概、剧本亮点、美术风格、角色设定、场景描述，还是分镜内容？'
+            setIsTyping(true)
+            try {
+                const result = await refineEpisode(episodeNum, phase, content, {
+                    art_style: scriptData.art_style,
+                    characters: scriptData.characters,
+                    scenes: scriptData.scenes,
+                    panels: scriptData.panels,
+                })
+
+                // Display LLM reply
+                const replyMsg: AgentMessage = {
+                    id: 'refine-' + Date.now(),
+                    role: 'assistant',
+                    content: result.reply,
+                    timestamp: Date.now(),
+                }
+                setMessages(prev => [...prev, replyMsg])
+                await saveMessage('assistant', result.reply)
+
+                // Apply updates
+                if (result.updates) {
+                    const updated = { ...scriptData }
+                    if (result.updates.characters) {
+                        for (const uc of result.updates.characters) {
+                            const idx = updated.characters.findIndex(c => c.name === uc.name)
+                            if (idx >= 0) updated.characters[idx] = { ...updated.characters[idx], ...uc }
+                            else updated.characters.push(uc)
+                        }
+                    }
+                    if (result.updates.scenes) {
+                        for (const us of result.updates.scenes) {
+                            const idx = updated.scenes.findIndex(s => s.name === us.name)
+                            if (idx >= 0) updated.scenes[idx] = { ...updated.scenes[idx], ...us }
+                            else updated.scenes.push(us)
+                        }
+                    }
+                    if (result.updates.panels) {
+                        for (const up of result.updates.panels) {
+                            const idx = updated.panels.findIndex(p => p.id === up.id)
+                            if (idx >= 0) updated.panels[idx] = { ...updated.panels[idx], ...up }
+                        }
+                    }
+                    if (result.updates.art_style) {
+                        updated.art_style = { ...updated.art_style, ...result.updates.art_style }
+                    }
+                    setScriptData(updated)
+
+                    // Re-render script markdown
+                    const updatedMarkdown = formatScriptAsMarkdown(updated, panelImages)
+                    setMessages(prev => prev.map(m =>
+                        m.id === 'script' ? { ...m, content: updatedMarkdown } : m
+                    ))
+
+                    // Persist
+                    await saveMessage('assistant', '', {
+                        type: 'episode_pipeline',
+                        phase,
+                        script_data: updated,
+                        panel_images: panelImages,
+                    })
+
+                    // Notify about items needing image regeneration
+                    const needsRegen = [
+                        ...(result.updates.characters?.filter(c => c.regenerate_image) || []).map(c => c.name),
+                        ...(result.updates.scenes?.filter(s => s.regenerate_image) || []).map(s => s.name),
+                    ]
+                    if (needsRegen.length > 0) {
+                        const regenMsg: AgentMessage = {
+                            id: 'regen-' + Date.now(),
+                            role: 'assistant',
+                            content: `已更新：${needsRegen.join('、')}。描述已修改，图片将在确认后重新生成。`,
+                            timestamp: Date.now(),
+                        }
+                        setMessages(prev => [...prev, regenMsg])
+                    }
+                }
+            } catch (e: any) {
+                const errMsg: AgentMessage = {
+                    id: 'refine-err-' + Date.now(),
+                    role: 'assistant',
+                    content: `处理失败：${e.message || '请重试'}`,
+                    timestamp: Date.now(),
+                }
+                setMessages(prev => [...prev, errMsg])
+            } finally {
+                setIsTyping(false)
+            }
+            return
+        }
+
+        // Default: no scriptData yet, general reply
+        setIsTyping(true)
+        setTimeout(() => {
             const aiMsg: AgentMessage = {
-                id: (Date.now() + 1).toString(),
+                id: 'chat-' + Date.now(),
                 role: 'assistant',
-                content: aiContent,
+                content: '请等待剧本生成完成后再进行对话交流。',
                 timestamp: Date.now(),
             }
             setMessages(prev => [...prev, aiMsg])
-            await saveMessage('assistant', aiContent)
             setIsTyping(false)
-        }, 1000)
+        }, 500)
     }
+
+    // ─── Render ───
 
     if (isLoading) {
         return (
@@ -336,9 +608,9 @@ export default function EpisodeConversationPage() {
     }
 
     return (
-        <div className="flex-1 h-full bg-[#000000] flex flex-col overflow-hidden">
+        <div className="flex-1 h-full bg-[#000000] flex flex-col overflow-hidden relative">
             {/* Header */}
-            <div className="flex items-center gap-4 px-6 py-4 border-b border-zinc-800/50">
+            <div className="absolute top-0 left-0 right-0 z-30 flex items-center gap-4 px-6 py-4 border-b border-zinc-800/50 bg-[#000000]/90 backdrop-blur-md opacity-0 hover:opacity-100 transition-opacity duration-300">
                 <Link
                     href={`/agent/${projectId}/episodes`}
                     className="p-2 rounded-lg hover:bg-zinc-800 transition-colors"
@@ -347,9 +619,15 @@ export default function EpisodeConversationPage() {
                 </Link>
                 <div>
                     <h1 className="text-lg font-semibold text-white">第{episodeNum}集</h1>
-                    <p className="text-xs text-zinc-500">剧本创作对话</p>
+                    <p className="text-xs text-zinc-500">
+                        {phase === 'script' && '正在生成剧本...'}
+                        {phase === 'confirm' && '等待确认角色与场景'}
+                        {phase === 'panels' && '正在生成分镜首帧'}
+                        {phase === 'video' && '视频生成'}
+                        {phase === 'done' && '全部完成'}
+                    </p>
                 </div>
-                {scriptGenerated && (
+                {(phase === 'video' || phase === 'done') && (
                     <div className="ml-auto flex gap-2">
                         <Button variant="outline" size="sm" className="text-xs">
                             <FileText className="h-3.5 w-3.5 mr-1.5" />
@@ -364,10 +642,63 @@ export default function EpisodeConversationPage() {
                 <AgentChat
                     messages={messages}
                     onSendMessage={handleSendMessage}
-                    onCardAction={() => { }}
+                    onCardAction={() => {}}
                     isTyping={isTyping}
                 />
             </div>
+
+            {/* Phase Action Bar */}
+            {phase === 'confirm' && !isTyping && (
+                <div className="flex items-center justify-center gap-3 px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/80">
+                    <Button
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm"
+                        onClick={handleConfirmAssets}
+                    >
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        确认角色与场景，开始生成分镜首帧
+                    </Button>
+                </div>
+            )}
+
+            {phase === 'panels' && panelProgress && (
+                <div className="flex items-center justify-center gap-3 px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/80">
+                    <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                    <span className="text-sm text-zinc-400">
+                        正在生成分镜首帧 ({panelProgress.done}/{panelProgress.total})
+                    </span>
+                </div>
+            )}
+
+            {(phase === 'video') && !isTyping && !panelProgress && Object.keys(panelImages).length > 0 && (
+                <div className="flex items-center justify-center gap-3 px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/80">
+                    <Button
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm"
+                        onClick={handleStartVideoGeneration}
+                    >
+                        <Film className="h-4 w-4 mr-2" />
+                        生成全部视频
+                    </Button>
+                </div>
+            )}
+
+            {generationError && !isTyping && (
+                <div className="flex items-center justify-center gap-3 px-6 py-3 border-t border-red-900/30 bg-red-950/20">
+                    <span className="text-xs text-red-400">生成失败</span>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs border-emerald-700 text-emerald-400 hover:bg-emerald-900/30"
+                        onClick={() => {
+                            setGenerationError(null)
+                            if (phase === 'script' || phase === 'loading') handleGenerateScript()
+                            else if (phase === 'panels') handleConfirmAssets()
+                        }}
+                    >
+                        <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                        重试
+                    </Button>
+                </div>
+            )}
         </div>
     )
 }
