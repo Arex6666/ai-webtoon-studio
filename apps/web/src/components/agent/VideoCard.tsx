@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { env } from '@/lib/utils/env'
+import { useMediaUrl } from '@/lib/api/media'
 
 /* ─────────── types ─────────── */
 
@@ -30,6 +31,16 @@ export interface VideoJobState {
 
 export type VideoCardPhase = 'select' | 'generating' | 'done'
 
+/** Structured metadata from LLM storyboard, used to compile high-quality video prompts */
+export interface PanelMeta {
+    camera_movement?: string
+    composition?: string
+    scene_description?: string
+    time_of_day?: string
+    weather?: string
+    duration_sec?: number
+}
+
 export interface VideoCardData {
     phase: VideoCardPhase
     panels: PanelImage[]
@@ -38,6 +49,8 @@ export interface VideoCardData {
     durationSec: number
     /** Per-panel durations (index → seconds), from LLM script data. Falls back to durationSec. */
     panelDurations?: Record<number, number>
+    /** Per-panel structured metadata from LLM storyboard (index → meta) */
+    panelMetas?: Record<number, PanelMeta>
     jobs: VideoJobState[]
 }
 
@@ -48,6 +61,67 @@ interface VideoCardProps {
     onDataChange: (data: VideoCardData) => void
     /** 当所有视频完成后，用户点击"合成视频" */
     onCompose?: (videoUrls: string[]) => void
+}
+
+/* ─────────── VideoJobRow subcomponent ─────────── */
+
+function VideoJobRow({ job }: { job: { job_id: string; video_url?: string; image_url?: string; status: string; progress: number; panel_index: number; error?: string } }) {
+    const resolvedVideoUrl = useMediaUrl(job.video_url ?? null)
+    const resolvedImageUrl = useMediaUrl(job.image_url ?? null)
+
+    return (
+        <div
+            className={cn(
+                'flex items-center gap-2.5 p-2.5 rounded-lg border transition-all',
+                job.status === 'succeeded' ? 'bg-emerald-500/[0.04] border-emerald-500/10' :
+                job.status === 'failed' ? 'bg-red-500/[0.04] border-red-500/10' :
+                'bg-white/[0.02] border-white/[0.04]'
+            )}
+        >
+            {/* thumb */}
+            <div className="w-12 h-12 rounded-lg overflow-hidden bg-zinc-800 flex-shrink-0 ring-1 ring-white/[0.06]">
+                {job.status === 'succeeded' && resolvedVideoUrl ? (
+                    <a href={resolvedVideoUrl} target="_blank" rel="noreferrer" className="relative block w-full h-full group">
+                        <img src={resolvedImageUrl ?? undefined} alt="" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Play className="w-4 h-4 text-white" />
+                        </div>
+                    </a>
+                ) : (
+                    <img src={resolvedImageUrl ?? undefined} alt="" className="w-full h-full object-cover" />
+                )}
+            </div>
+
+            {/* info */}
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] text-zinc-300 font-medium">
+                        分镜 {job.panel_index + 1}
+                    </span>
+                    {job.status === 'queued' && <span className="text-[10px] text-zinc-500">队列中</span>}
+                    {job.status === 'running' && (
+                        <span className="text-[10px] text-cyan-400 flex items-center gap-1">
+                            <Loader2 className="w-2.5 h-2.5 animate-spin" /> {Math.round(job.progress * 100)}%
+                        </span>
+                    )}
+                    {job.status === 'succeeded' && <span className="text-[10px] text-emerald-400">✓ 完成</span>}
+                    {job.status === 'failed' && <span className="text-[10px] text-red-400">✗ 失败</span>}
+                </div>
+                <div className="h-[2px] bg-zinc-800 rounded-full overflow-hidden">
+                    <motion.div
+                        className={cn('h-full rounded-full',
+                            job.status === 'succeeded' ? 'bg-emerald-500' :
+                            job.status === 'failed' ? 'bg-red-500' :
+                            'bg-cyan-500'
+                        )}
+                        animate={{ width: `${job.progress * 100}%` }}
+                        transition={{ duration: 0.4 }}
+                    />
+                </div>
+                {job.error && <p className="text-[10px] text-red-400/70 mt-0.5 truncate">{job.error}</p>}
+            </div>
+        </div>
+    )
 }
 
 /* ─────────── component ─────────── */
@@ -80,6 +154,26 @@ export function VideoCard({ data, projectId, episodeNum, onDataChange, onCompose
             : undefined
         update({ phase: 'generating' })
 
+        // Build panel_metadata from structured storyboard data
+        const panelMetadata = data.panelMetas
+            ? data.selectedIndices.map(i => {
+                const meta = data.panelMetas![i]
+                if (!meta) return {}
+                // Map frontend field names to backend PanelVideoMeta fields
+                return {
+                    camera_move: mapCameraMovement(meta.camera_movement),
+                    shot_type: extractShotType(meta.composition),
+                    actions: meta.scene_description,
+                    mood: undefined,  // not available yet
+                    weather: meta.weather,
+                    time_of_day: meta.time_of_day,
+                    composition_notes: meta.composition ? [meta.composition] : undefined,
+                    visual_prompt: meta.scene_description,
+                    duration_sec: meta.duration_sec,
+                }
+            })
+            : undefined
+
         try {
             const resp = await fetch(
                 `${env.API_BASE_URL}/api/v1/agent/episode/${episodeNum}/generate-video`,
@@ -93,6 +187,7 @@ export function VideoCard({ data, projectId, episodeNum, onDataChange, onCompose
                         duration_sec: data.durationSec,
                         duration_per_image: perImageDurations,
                         provider: 'doubao',
+                        ...(panelMetadata && { panel_metadata: panelMetadata }),
                     }),
                 }
             )
@@ -287,58 +382,7 @@ export function VideoCard({ data, projectId, episodeNum, onDataChange, onCompose
             {(data.phase === 'generating' || data.phase === 'done') && (
                 <div className="p-4 space-y-2">
                     {data.jobs.map((job, idx) => (
-                        <div
-                            key={job.job_id}
-                            className={cn(
-                                'flex items-center gap-2.5 p-2.5 rounded-lg border transition-all',
-                                job.status === 'succeeded' ? 'bg-emerald-500/[0.04] border-emerald-500/10' :
-                                job.status === 'failed' ? 'bg-red-500/[0.04] border-red-500/10' :
-                                'bg-white/[0.02] border-white/[0.04]'
-                            )}
-                        >
-                            {/* thumb */}
-                            <div className="w-12 h-12 rounded-lg overflow-hidden bg-zinc-800 flex-shrink-0 ring-1 ring-white/[0.06]">
-                                {job.status === 'succeeded' && job.video_url ? (
-                                    <a href={job.video_url} target="_blank" rel="noreferrer" className="relative block w-full h-full group">
-                                        <img src={job.image_url} alt="" className="w-full h-full object-cover" />
-                                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Play className="w-4 h-4 text-white" />
-                                        </div>
-                                    </a>
-                                ) : (
-                                    <img src={job.image_url} alt="" className="w-full h-full object-cover" />
-                                )}
-                            </div>
-
-                            {/* info */}
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between mb-1">
-                                    <span className="text-[11px] text-zinc-300 font-medium">
-                                        分镜 {job.panel_index + 1}
-                                    </span>
-                                    {job.status === 'queued' && <span className="text-[10px] text-zinc-500">队列中</span>}
-                                    {job.status === 'running' && (
-                                        <span className="text-[10px] text-cyan-400 flex items-center gap-1">
-                                            <Loader2 className="w-2.5 h-2.5 animate-spin" /> {Math.round(job.progress * 100)}%
-                                        </span>
-                                    )}
-                                    {job.status === 'succeeded' && <span className="text-[10px] text-emerald-400">✓ 完成</span>}
-                                    {job.status === 'failed' && <span className="text-[10px] text-red-400">✗ 失败</span>}
-                                </div>
-                                <div className="h-[2px] bg-zinc-800 rounded-full overflow-hidden">
-                                    <motion.div
-                                        className={cn('h-full rounded-full',
-                                            job.status === 'succeeded' ? 'bg-emerald-500' :
-                                            job.status === 'failed' ? 'bg-red-500' :
-                                            'bg-cyan-500'
-                                        )}
-                                        animate={{ width: `${job.progress * 100}%` }}
-                                        transition={{ duration: 0.4 }}
-                                    />
-                                </div>
-                                {job.error && <p className="text-[10px] text-red-400/70 mt-0.5 truncate">{job.error}</p>}
-                            </div>
-                        </div>
+                        <VideoJobRow key={job.job_id} job={job} />
                     ))}
 
                     {/* compose button — shown when done and has 2+ videos */}
@@ -374,4 +418,37 @@ export function VideoCard({ data, projectId, episodeNum, onDataChange, onCompose
             )}
         </motion.div>
     )
+}
+
+/* ─────────── helpers: map storyboard fields to video metadata ─────────── */
+
+/** Map Chinese/mixed camera_movement strings to enum values the prompt compiler expects */
+function mapCameraMovement(raw?: string): string | undefined {
+    if (!raw) return undefined
+    const lower = raw.toLowerCase()
+    if (/推|dolly.?in|push/i.test(lower)) return 'dolly_in'
+    if (/拉|dolly.?out|pull/i.test(lower)) return 'dolly_out'
+    if (/摇|pan/i.test(lower)) return 'pan'
+    if (/俯仰|tilt/i.test(lower)) return 'tilt'
+    if (/变焦推|zoom.?in/i.test(lower)) return 'zoom_in'
+    if (/变焦拉|zoom.?out/i.test(lower)) return 'zoom_out'
+    if (/手持|handheld/i.test(lower)) return 'handheld'
+    if (/固定|static|静/i.test(lower)) return 'static'
+    // 跟拍/跟 → treat as handheld
+    if (/跟/i.test(lower)) return 'handheld'
+    return undefined
+}
+
+/** Extract shot type from composition string (e.g. "全景俯拍" → "WS", "近景" → "CU") */
+function extractShotType(composition?: string): string | undefined {
+    if (!composition) return undefined
+    const c = composition
+    if (/极特写|ECU/i.test(c)) return 'ECU'
+    if (/特写|close.?up|CU/i.test(c)) return 'CU'
+    if (/中景|medium|MS/i.test(c)) return 'MS'
+    if (/远景|long.?shot|LS/i.test(c)) return 'LS'
+    if (/全景|wide|WS|establishing/i.test(c)) return 'WS'
+    if (/过肩|OTS|over/i.test(c)) return 'OTS'
+    if (/近景/i.test(c)) return 'CU'
+    return undefined
 }
