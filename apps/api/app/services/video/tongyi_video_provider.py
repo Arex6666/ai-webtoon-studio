@@ -14,6 +14,7 @@ import time
 from typing import Optional, Dict, Any
 
 from app.core.config import settings
+from app.services.storage.media_persister import persist_media, MediaPersistError
 from app.services.video.video_provider_base import (
     VideoProviderBase,
     VideoGenerationRequest,
@@ -60,6 +61,8 @@ class TongyiVideoProvider(VideoProviderBase):
             "X-DashScope-Async": "enable",  # 启用异步模式
         }
         
+        metadata = request.metadata if isinstance(request.metadata, dict) else {}
+
         # 根据输入类型选择模型
         if request.end_frame_url:
             # 首尾帧模式
@@ -82,6 +85,16 @@ class TongyiVideoProvider(VideoProviderBase):
             input_data = {
                 "prompt": request.prompt,
             }
+
+        model_override = metadata.get("model")
+        if isinstance(model_override, str) and model_override.strip():
+            model = model_override.strip()
+
+        prompt_extend = metadata.get("prompt_extend")
+        if isinstance(prompt_extend, bool):
+            prompt_extend_enabled = prompt_extend
+        else:
+            prompt_extend_enabled = True
         
         # 构建请求体
         payload = {
@@ -90,13 +103,16 @@ class TongyiVideoProvider(VideoProviderBase):
             "parameters": {
                 "duration": int(request.duration_sec),
                 "resolution": self._get_resolution(request.width, request.height),
-                "prompt_extend": True,  # 智能优化 prompt
+                "prompt_extend": prompt_extend_enabled,  # 智能优化 prompt
             }
         }
         
         if request.seed:
             payload["parameters"]["seed"] = request.seed
-        
+
+        if request.negative_prompt:
+            input_data["negative_prompt"] = request.negative_prompt
+
         logger.info(f"[TongyiVideo] Submitting job with model={model}")
         
         try:
@@ -211,15 +227,22 @@ class TongyiVideoProvider(VideoProviderBase):
             
             # 提取视频 URL
             video_url = output.get("video_url")
-            
+
             # 提取预览帧（如果有）
             preview_url = None
             frames = []
-            
+
+            # 持久化到 MinIO
+            try:
+                if video_url:
+                    video_url = await persist_media(video_url, "videos", "video/mp4")
+            except MediaPersistError as e:
+                logger.warning(f"[TongyiVideo] Failed to persist media: {e}")
+
             # 计算费用（根据分辨率和时长估算）
             usage = data.get("usage", {})
-            cost = usage.get("video_count", 1) * 0.5  # 假设每个视频 0.5 元
-            
+            cost = usage.get("video_count", 1) * 0.5
+
             return VideoResult(
                 success=True,
                 video_url=video_url,
