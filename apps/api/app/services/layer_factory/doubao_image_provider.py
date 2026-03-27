@@ -21,7 +21,7 @@ from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 
 from app.core.config import settings
-from app.services.storage import get_object_store
+from app.services.storage.media_persister import persist_media, persist_media_bytes, MediaPersistError
 
 logger = logging.getLogger(__name__)
 
@@ -235,43 +235,25 @@ class DoubaoImageProvider:
                     error_code="NO_OUTPUT",
                 )
             
-            # ==== 下载临时图片并上传到 MinIO 获取永久 URL ====
-            persistent_url = temp_image_url  # fallback
-            
+            # ==== 持久化到 MinIO ====
+            storage_key = None
             try:
-                # 下载图片
-                if temp_image_url and not image_data:
-                    logger.info(f"[DoubaoImage] Downloading image from Volcengine...")
-                    download_resp = requests.get(temp_image_url, timeout=60)
-                    if download_resp.status_code == 200:
-                        image_data = download_resp.content
-                        logger.info(f"[DoubaoImage] Downloaded {len(image_data)} bytes")
-                    else:
-                        logger.warning(f"[DoubaoImage] Failed to download image: {download_resp.status_code}")
-                
-                # 上传到 MinIO
                 if image_data:
-                    storage = get_object_store()
-                    if storage:
-                        target_key = f"generated/{uuid.uuid4().hex}.jpg"
-                        persistent_url = await storage.upload_bytes(
-                            data=image_data,
-                            target_key=target_key,
-                            content_type="image/jpeg",
-                        )
-                        logger.info(f"[DoubaoImage] Uploaded to MinIO: {persistent_url}")
-                    else:
-                        logger.warning("[DoubaoImage] No storage configured, using temp URL")
-            except Exception as upload_err:
-                logger.warning(f"[DoubaoImage] Failed to persist image: {upload_err}, using temp URL")
-            
+                    storage_key = await persist_media_bytes(image_data, "images", "image/jpeg")
+                elif temp_image_url:
+                    storage_key = await persist_media(temp_image_url, "images", "image/jpeg")
+            except MediaPersistError as e:
+                logger.warning(f"[DoubaoImage] Failed to persist image: {e}, using temp URL")
+
             generation_time = int((time.time() - start_time) * 1000)
-            
-            logger.info(f"[DoubaoImage] Success! Image URL: {persistent_url[:80]}...")
-            
+            # Use storage key if persisted, otherwise fall back to temp URL
+            result_url = storage_key or temp_image_url
+
+            logger.info(f"[DoubaoImage] Success! URL/key: {result_url[:80]}...")
+
             return DoubaoImageResult(
                 success=True,
-                image_url=persistent_url,
+                image_url=result_url,
                 image_data=image_data,
                 seed=seed_used,
                 cost=0.1,
