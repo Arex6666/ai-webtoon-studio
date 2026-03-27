@@ -22,13 +22,16 @@ class ObjectStore:
         access_key: Optional[str] = None,
         secret_key: Optional[str] = None,
         bucket: Optional[str] = None,
-        use_ssl: bool = True
+        use_ssl: Optional[bool] = None
     ):
         self.endpoint = endpoint or os.getenv("MINIO_ENDPOINT", "localhost:9000")
         self.access_key = access_key or os.getenv("MINIO_ACCESS_KEY", "minioadmin")
         self.secret_key = secret_key or os.getenv("MINIO_SECRET_KEY", "minioadmin")
         self.bucket = bucket or os.getenv("MINIO_BUCKET", "webtoon-studio")
-        self.use_ssl = use_ssl
+        if use_ssl is not None:
+            self.use_ssl = use_ssl
+        else:
+            self.use_ssl = os.getenv("MINIO_SECURE", "false").lower() == "true"
         
         self._client = None
     
