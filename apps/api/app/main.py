@@ -11,11 +11,14 @@ from app.core.database import init_db
 from app.api.routes.auth import hash_password
 from app.models.user import User
 
+# 初始化 Celery 应用绑定，确保共享任务使用正确的 Broker
+from app.celery_app import celery_app
+
 # 重要：在导入路由之前先导入所有模型，确保 SQLAlchemy 关系正确注册
 from app import models  # noqa: F401 - 确保所有模型在路由导入前加载
 # Trigger reload
 
-from app.api.routes import projects, chapters, panels, assets, render, typeset, compose, auth, identity, scene_anchor, brain, qa, ws, studios, exports, shot_versions, jobs, timeline, bindings, analytics, release, layerpacks, generate, templates, drafts, batch_render, script_pipeline, automation, asset_autobuild, props, conversations, faceid, export_strip, agent, providers
+from app.api.routes import projects, chapters, panels, assets, render, typeset, compose, auth, identity, scene_anchor, brain, qa, ws, studios, exports, shot_versions, jobs, timeline, bindings, analytics, release, layerpacks, generate, templates, drafts, batch_render, script_pipeline, automation, asset_autobuild, props, conversations, faceid, export_strip, agent, providers, episode_video, media
 
 # 配置日志
 logging.basicConfig(
@@ -170,6 +173,12 @@ app.include_router(export_strip.router, prefix="/api/v1", tags=["导出"])
 
 # P0: Provider Status API
 app.include_router(providers.router, tags=["Providers"])
+
+# Episode Video Generation (豆包视频大模型)
+app.include_router(episode_video.router, prefix="/api/v1/agent", tags=["视频生成"])
+
+# Media URL (presigned URL generation)
+app.include_router(media.router, prefix="/api/v1", tags=["媒体"])
 
 
 @app.get("/")
