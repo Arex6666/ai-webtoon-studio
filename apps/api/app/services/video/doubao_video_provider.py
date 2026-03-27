@@ -13,6 +13,7 @@ import json
 from typing import Optional, Dict, Any
 
 from app.core.config import settings
+from app.services.storage.media_persister import persist_media, MediaPersistError
 from app.services.video.video_provider_base import (
     VideoProviderBase,
     VideoGenerationRequest,
@@ -55,9 +56,13 @@ class DoubaoVideoProvider(VideoProviderBase):
             "X-Api-Version": self.api_version,
         }
         
+        model_name = request.metadata.get("model") if isinstance(request.metadata, dict) else None
+        if not isinstance(model_name, str) or not model_name.strip():
+            model_name = "jimeng-video-v1"
+
         # 构建请求体 - 图生视频
         payload = {
-            "model": "jimeng-video-v1",  # 即梦视频模型
+            "model": model_name,  # 即梦视频模型
             "input": {
                 "image_url": request.start_frame_url,
                 "prompt": request.prompt,
@@ -77,8 +82,11 @@ class DoubaoVideoProvider(VideoProviderBase):
         
         if request.negative_prompt:
             payload["input"]["negative_prompt"] = request.negative_prompt
-        
-        logger.info(f"[DoubaoVideo] Submitting job")
+
+        if request.motion_strength is not None:
+            payload["parameters"]["motion_strength"] = request.motion_strength
+
+        logger.info(f"[DoubaoVideo] Submitting job (strength={request.motion_strength})")
         
         try:
             response = await self.client.post(
@@ -200,10 +208,19 @@ class DoubaoVideoProvider(VideoProviderBase):
             # 提取视频 URL
             output = task_data.get("output", {})
             video_url = output.get("video_url") or task_data.get("video_url")
-            
+
             # 提取预览
             preview_url = output.get("cover_url") or output.get("preview_url")
-            
+
+            # 持久化到 MinIO
+            try:
+                if video_url:
+                    video_url = await persist_media(video_url, "videos", "video/mp4")
+                if preview_url:
+                    preview_url = await persist_media(preview_url, "images", "image/jpeg")
+            except MediaPersistError as e:
+                logger.warning(f"[DoubaoVideo] Failed to persist media: {e}")
+
             return VideoResult(
                 success=True,
                 video_url=video_url,
@@ -212,7 +229,7 @@ class DoubaoVideoProvider(VideoProviderBase):
                 duration_sec=output.get("duration", 5),
                 seed=output.get("seed"),
                 provider=self.provider_name,
-                cost=0.5,  # 估算费用
+                cost=0.5,
             )
             
         except Exception as e:
