@@ -2,10 +2,28 @@
 
 import React from 'react'
 import { cn } from '@/lib/utils'
+import { useMediaUrl, isStorageKey } from '@/lib/api/media'
 
 interface MarkdownContentProps {
     content: string
     className?: string
+}
+
+/** Image component that resolves MinIO storage keys to presigned URLs */
+function StorageImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
+    const resolvedUrl = useMediaUrl(src)
+    if (!resolvedUrl) {
+        return (
+            <div className={cn("flex items-center justify-center bg-[#18181B] rounded-lg border border-[#27272A] text-[#71717A] text-xs py-8", className)}>
+                加载中...
+            </div>
+        )
+    }
+    return (
+        <a href={resolvedUrl} target="_blank" rel="noreferrer" className="block">
+            <img src={resolvedUrl} alt={alt} className={className} loading="lazy" referrerPolicy="no-referrer" />
+        </a>
+    )
 }
 
 /**
@@ -13,67 +31,46 @@ interface MarkdownContentProps {
  * 支持：标题(#)、粗体(**)、斜体(*)、列表(- 和 数字.)、代码块(`)
  */
 export function MarkdownContent({ content, className }: MarkdownContentProps) {
+    const imgClass = "max-w-[280px] w-full rounded-lg border border-[#27272A]"
+
     const tryRenderImageLine = (line: string, index: number): React.ReactNode | null => {
         const trimmed = line.trim()
 
-        // 1) Markdown 图片: ![alt](url)
-        const mdImage = trimmed.match(/^!\[(.*?)\]\((https?:\/\/[^\s)]+)\)$/)
+        // 1) Markdown 图片: ![alt](url or storage-key)
+        const mdImage = trimmed.match(/^!\[(.*?)\]\(([^\s)]+)\)$/)
         if (mdImage) {
             const alt = mdImage[1] || 'image'
-            const url = mdImage[2]
+            const src = mdImage[2]
             return (
                 <div key={`img-${index}`} className="my-2">
-                    <a href={url} target="_blank" rel="noreferrer" className="block">
-                        <img
-                            src={url}
-                            alt={alt}
-                            className="max-w-full rounded-lg border border-[#27272A]"
-                            loading="lazy"
-                            referrerPolicy="no-referrer"
-                        />
-                    </a>
+                    <StorageImage src={src} alt={alt} className={imgClass} />
                 </div>
             )
         }
 
-        // 2) 纯 URL（你截图里这种）: [标题](url) 或 url
-        const mdLink = trimmed.match(/^\[(.*?)\]\((https?:\/\/[^\s)]+)\)$/)
+        // 2) 链接 [标题](url) — render as image if URL looks like an image
+        const mdLink = trimmed.match(/^\[(.*?)\]\(([^\s)]+)\)$/)
         if (mdLink) {
             const label = mdLink[1] || ''
-            const url = mdLink[2]
-            if (/\.(png|jpe?g|webp|gif)(\?.*)?$/i.test(url) || label.includes('场景图') || label.includes('参考图') || label.includes('图片')) {
+            const src = mdLink[2]
+            if (/\.(png|jpe?g|webp|gif)(\?.*)?$/i.test(src) || isStorageKey(src) || label.includes('场景图') || label.includes('参考图') || label.includes('图片') || label.includes('角色图')) {
                 return (
                     <div key={`img-${index}`} className="my-2">
-                        <div className="text-xs text-[#A1A1AA] mb-1">{label}</div>
-                        <a href={url} target="_blank" rel="noreferrer" className="block">
-                            <img
-                                src={url}
-                                alt={label || 'image'}
-                                className="max-w-full rounded-lg border border-[#27272A]"
-                                loading="lazy"
-                                referrerPolicy="no-referrer"
-                            />
-                        </a>
+                        {label && <div className="text-xs text-[#A1A1AA] mb-1">{label}</div>}
+                        <StorageImage src={src} alt={label || 'image'} className={imgClass} />
                     </div>
                 )
             }
         }
 
+        // 3) 裸 URL 图片
         const rawUrl = trimmed.match(/^(https?:\/\/\S+)$/)
         if (rawUrl) {
             const url = rawUrl[1]
             if (/\.(png|jpe?g|webp|gif)(\?.*)?$/i.test(url)) {
                 return (
                     <div key={`img-${index}`} className="my-2">
-                        <a href={url} target="_blank" rel="noreferrer" className="block">
-                            <img
-                                src={url}
-                                alt="image"
-                                className="max-w-full rounded-lg border border-[#27272A]"
-                                loading="lazy"
-                                referrerPolicy="no-referrer"
-                            />
-                        </a>
+                        <StorageImage src={url} alt="image" className={imgClass} />
                     </div>
                 )
             }
