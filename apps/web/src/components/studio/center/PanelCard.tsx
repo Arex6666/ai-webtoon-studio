@@ -7,6 +7,7 @@ import { useStudioStore } from "@/lib/store/studioStore"
 import { useShallow } from "zustand/react/shallow"
 import { memo } from "react"
 import { Loader2, Clock, CheckCircle, AlertCircle, FileEdit, Plus, Image as ImageIcon, Sparkles, RefreshCw, Film } from "lucide-react"
+import { useMediaUrl } from '@/lib/api/media'
 
 interface PanelCardProps {
   panel: {
@@ -90,17 +91,15 @@ export const PanelCard = memo(function PanelCard({ panel, selected, onClick, onD
     if (!chapterId) return
 
     try {
-      const { renderApi, chaptersApi } = await import('@/lib/api/services')
-      await renderApi.renderPanel(panel.id, true)
-
-      // 轻量刷新一次，确保 preview_url 能尽快落到 UI
-      const studioData = await chaptersApi.getStudio(chapterId)
-      setStudioData(studioData)
+      const { createJob } = useStudioStore.getState()
+      await createJob('image', panel.id, 'doubao')
     } catch (err) {
       console.error('Failed to render panel:', err)
       alert('生成面板图失败: ' + (err instanceof Error ? err.message : '未知错误'))
     }
   }
+
+  const resolvedPreviewUrl = useMediaUrl(panel.previewUrl)
 
   const config = STATUS_CONFIG[panel.status] || STATUS_CONFIG.Draft
   const Icon = config.icon
@@ -151,9 +150,9 @@ export const PanelCard = memo(function PanelCard({ panel, selected, onClick, onD
 
         {/* Thumbnail - Larger size */}
         <div className="relative w-32 aspect-video rounded-xl overflow-hidden bg-gradient-to-br from-black/30 to-black/50 border border-white/[0.06] flex items-center justify-center shadow-inner group-hover:border-white/[0.1] transition-colors">
-          {panel.previewUrl ? (
+          {resolvedPreviewUrl ? (
             <img
-              src={panel.previewUrl}
+              src={resolvedPreviewUrl}
               alt={panel.title}
               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
               onError={(e) => {
