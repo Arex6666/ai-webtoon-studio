@@ -9,6 +9,7 @@ import { assetsApi } from '@/lib/api/services'
 import type { Asset } from '@/lib/api/types'
 
 import { BasicTab } from './drawer/BasicTab'
+import { TraitsTab } from './drawer/TraitsTab'
 
 export interface AssetEditDrawerProps {
     assetId: string | null
@@ -87,8 +88,8 @@ export function AssetEditDrawer({ assetId, onClose, onSaved }: AssetEditDrawerPr
                         <TabsContent value="basic" className="mt-0">
                             {asset && <BasicTab asset={asset} draft={draft} onChange={setDraft} />}
                         </TabsContent>
-                        <TabsContent value="traits" className="mt-0 text-sm text-muted-foreground">
-                            Traits tab — see Task 17.
+                        <TabsContent value="traits" className="mt-0">
+                            {asset && <TraitsTab asset={asset} draft={draft} onChange={setDraft} />}
                         </TabsContent>
                         <TabsContent value="versions" className="mt-0 text-sm text-muted-foreground">
                             Versions tab — see Task 19.
