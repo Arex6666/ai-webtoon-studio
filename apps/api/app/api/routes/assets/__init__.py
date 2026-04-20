@@ -559,3 +559,5 @@ async def generate_asset_image(
 router.include_router(characters_router, prefix="", tags=["assets-characters"])
 router.include_router(scenes_router, prefix="", tags=["assets-scenes"])
 router.include_router(consistency_router, prefix="", tags=["assets-consistency"])
+from app.api.routes.assets import usage as _usage_module
+router.include_router(_usage_module.router, tags=["assets"])
