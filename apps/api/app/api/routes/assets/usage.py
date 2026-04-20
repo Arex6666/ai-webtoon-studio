@@ -4,10 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models.asset import Asset
 from app.models.chapter import Chapter
 from app.models.panel import Panel
+from app.models.user import User
 
 router = APIRouter()
 
@@ -43,6 +45,7 @@ def get_asset_usage(
     asset_id: str,
     limit: int = Query(50, ge=1, le=500),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if not asset:
