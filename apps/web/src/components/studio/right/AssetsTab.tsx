@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useStudioStore } from '@/lib/store/studioStore'
 import { useShallow } from 'zustand/react/shallow'
-import { chaptersApi, assetsApi, sceneAnchorApi } from '@/lib/api/services'
+import { chaptersApi, assetsApi, sceneAnchorApi, panelsApi } from '@/lib/api/services'
 import { useToast } from '@/hooks/use-toast'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
@@ -159,11 +159,12 @@ function ControlMapBadge({
 // ─── main component ───────────────────────────────────────────────────────────
 
 export function AssetsTab() {
-    const { chapterId, projectId, characters: storeCharacters, scenes: storeScenes } =
+    const { chapterId, projectId, selectedPanelId, characters: storeCharacters, scenes: storeScenes } =
         useStudioStore(
             useShallow((s) => ({
                 chapterId: s.chapterId,
                 projectId: s.projectId,
+                selectedPanelId: s.selectedPanelId,
                 characters: s.characters,
                 scenes: s.scenes,
             }))
@@ -188,7 +189,14 @@ export function AssetsTab() {
     const [regeneratingScene, setRegeneratingScene] = useState<string | null>(null)
 
     // ── bind dialog ──
-    const [bindingTarget, setBindingTarget] = useState<{ id: string; name: string; type: 'character' | 'scene' } | null>(null)
+    const [bindingTarget, setBindingTarget] = useState<{
+        id: string
+        name: string
+        type: 'character' | 'scene'
+        panelId: string
+        slotIndex?: number
+        onBound?: () => Promise<void> | void
+    } | null>(null)
     const [projectAssets, setProjectAssets] = useState<Array<{ id: string; name: string; thumbnail_url?: string }>>([])
     const [generatingImage, setGeneratingImage] = useState<string | null>(null)
 
@@ -433,13 +441,24 @@ export function AssetsTab() {
                                                     size="sm"
                                                     variant="outline"
                                                     className="h-6 px-2 text-xs"
-                                                    onClick={() =>
+                                                    disabled={!selectedPanelId}
+                                                    onClick={() => {
+                                                        if (!selectedPanelId) {
+                                                            toast({
+                                                                title: '请先选择分镜',
+                                                                description: '需要先在画布中选中一个分镜才能绑定资产',
+                                                                variant: 'destructive',
+                                                            })
+                                                            return
+                                                        }
                                                         setBindingTarget({
                                                             id: char.id,
                                                             name: char.name,
                                                             type: 'character',
+                                                            panelId: selectedPanelId,
+                                                            slotIndex: 0,
                                                         })
-                                                    }
+                                                    }}
                                                 >
                                                     <Link className="w-3 h-3 mr-1" />
                                                     绑定
@@ -629,10 +648,28 @@ export function AssetsTab() {
                                 <div
                                     key={asset.id}
                                     className="flex items-center justify-between p-3 rounded-lg border border-white/10 hover:border-primary/50 cursor-pointer transition-colors"
-                                    onClick={() => {
-                                        // TODO: call bind API once backend endpoint is available
-                                        console.log(`Bind ${bindingTarget?.id} → asset ${asset.id}`)
-                                        setBindingTarget(null)
+                                    onClick={async () => {
+                                        if (!bindingTarget) return
+                                        try {
+                                            await panelsApi.updateBindings(bindingTarget.panelId, {
+                                                slot: bindingTarget.type === 'scene' ? 'scene' : 'character',
+                                                slot_index: bindingTarget.slotIndex ?? 0,
+                                                asset_id: asset.id,
+                                            })
+                                            toast({
+                                                title: '已绑定',
+                                                description: `${asset.name} → ${bindingTarget.name}`,
+                                            })
+                                            const onBound = bindingTarget.onBound
+                                            setBindingTarget(null)
+                                            if (onBound) await onBound()
+                                        } catch (err) {
+                                            toast({
+                                                title: '绑定失败',
+                                                description: err instanceof Error ? err.message : String(err),
+                                                variant: 'destructive',
+                                            })
+                                        }
                                     }}
                                 >
                                     <div className="flex items-center gap-3">
