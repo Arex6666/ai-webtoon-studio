@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { assetsApi } from '@/lib/api/services'
 import type { Asset } from '@/lib/api/types'
+import { AssetSourceBadge } from '@/components/assets/AssetSourceBadge'
 
 export interface BasicTabProps {
     asset: Asset
@@ -24,6 +25,20 @@ export function BasicTab({ asset, draft, onChange }: BasicTabProps) {
 
     return (
         <div className="space-y-4">
+            {(() => {
+                const createdVia = (asset as any).data_json?.created_via as string | undefined
+                const sourceConv = (asset as any).data_json?.source_conversation_id as string | undefined
+                return (
+                    <div className="flex items-center gap-2 pb-2 border-b border-white/10 mb-2">
+                        <span className="text-xs text-muted-foreground">来源</span>
+                        {createdVia === 'agent' ? (
+                            <AssetSourceBadge createdVia={createdVia} sourceConversationId={sourceConv} size="sm" />
+                        ) : (
+                            <span className="text-xs text-muted-foreground">手动创建</span>
+                        )}
+                    </div>
+                )
+            })()}
             <div>
                 <Label>名称</Label>
                 <Input

@@ -44,6 +44,7 @@ import {
     XCircle,
 } from 'lucide-react'
 import { CreateAssetModal } from '@/components/studio/modals/CreateAssetModal'
+import { AssetSourceBadge } from '@/components/assets/AssetSourceBadge'
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -200,7 +201,7 @@ export function AssetsTab() {
         currentAssetId?: string | null
         onBound?: () => Promise<void> | void
     } | null>(null)
-    const [projectAssets, setProjectAssets] = useState<Array<{ id: string; name: string; thumbnail_url?: string }>>([])
+    const [projectAssets, setProjectAssets] = useState<Array<{ id: string; name: string; thumbnail_url?: string; data_json?: Record<string, any> }>>([])
     const [generatingImage, setGeneratingImage] = useState<string | null>(null)
 
     // ── create-asset dialog seed (fired from binding dialog's "Create new asset") ──
@@ -702,7 +703,14 @@ export function AssetsTab() {
                                                 )}
                                             </div>
                                         )}
-                                        <span className="font-medium text-sm">{asset.name}</span>
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                            <span className="font-medium text-sm truncate">{asset.name}</span>
+                                            <AssetSourceBadge
+                                                createdVia={(asset as any).data_json?.created_via}
+                                                sourceConversationId={(asset as any).data_json?.source_conversation_id}
+                                                size="sm"
+                                            />
+                                        </div>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <Button

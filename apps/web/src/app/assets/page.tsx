@@ -38,6 +38,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { AssetEditDrawer } from '@/components/assets/AssetEditDrawer'
+import { AssetSourceBadge } from '@/components/assets/AssetSourceBadge'
 
 // 资产类型配置
 const ASSET_TYPES = {
@@ -148,9 +149,16 @@ function AssetCard({
 
             {/* Content */}
             <CardContent className="p-3 space-y-1.5">
-                <h3 className="font-medium text-sm text-foreground/90 line-clamp-1">
-                    {asset.name}
-                </h3>
+                <div className="flex items-center gap-1.5 min-w-0">
+                    <h3 className="font-medium text-sm text-foreground/90 line-clamp-1 flex-1 min-w-0">
+                        {asset.name}
+                    </h3>
+                    <AssetSourceBadge
+                        createdVia={(asset as any).data_json?.created_via}
+                        sourceConversationId={(asset as any).data_json?.source_conversation_id}
+                        size="sm"
+                    />
+                </div>
                 {asset.description && (
                     <p className="text-xs text-muted-foreground line-clamp-2">
                         {asset.description}
