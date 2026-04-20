@@ -14,6 +14,13 @@ from app.models.chapter import Chapter
 from app.models.render_job import RenderJob, JobType, JobStatus
 from app.schemas.panel_spec import PanelSpec
 from app.schemas.chapter_layout import PanelSlot, PanelWeight
+from app.schemas.panel_bindings import PanelBindingPatch, PanelBindingResponse
+from app.services.binding import (
+    apply_panel_binding,
+    refresh_chapter_bindings,
+)
+from app.services.binding.binding_service import get_asset_or_raise
+from sqlalchemy.orm.attributes import flag_modified
 
 router = APIRouter()
 
@@ -261,6 +268,56 @@ async def update_panel_spec(
         "message": "Panel spec updated",
         "panel_id": panel_id
     }
+
+
+@router.patch("/{panel_id}/bindings", response_model=PanelBindingResponse)
+def patch_panel_bindings(
+    panel_id: str,
+    body: PanelBindingPatch,
+    db: Session = Depends(get_db),
+):
+    """Update a single binding slot on a panel's spec_json.
+
+    Slot='character'/'prop' use slot_index; slot='scene' ignores slot_index.
+    asset_id=null clears the binding.
+    """
+    panel = db.query(Panel).filter(Panel.id == panel_id).first()
+    if not panel:
+        raise HTTPException(status_code=404, detail="Panel not found")
+
+    if panel.render_status in ("queued", "running", "rendering"):
+        raise HTTPException(
+            status_code=409,
+            detail="Panel is rendering; cannot modify bindings. Wait or cancel render first.",
+        )
+
+    if body.asset_id is not None:
+        try:
+            get_asset_or_raise(db, body.asset_id, body.slot)
+        except LookupError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    new_spec = apply_panel_binding(
+        panel.spec_json or {},
+        body.slot,
+        body.slot_index,
+        body.asset_id,
+        body.asset_version_id,
+    )
+    panel.spec_json = new_spec
+    flag_modified(panel, "spec_json")
+    db.commit()
+    db.refresh(panel)
+
+    refresh_chapter_bindings(db, panel.chapter_id)
+
+    return PanelBindingResponse(
+        panel_id=panel.id,
+        spec_json=panel.spec_json,
+        chapter_bindings_updated=True,
+    )
 
 
 @router.put("/{panel_id}/order")
