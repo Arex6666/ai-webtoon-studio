@@ -313,6 +313,28 @@ def patch_panel_bindings(
 
     refresh_chapter_bindings(db, panel.chapter_id)
 
+    try:
+        from app.api.routes.ws import push_unified_job_event
+        import anyio
+
+        async def _emit():
+            await push_unified_job_event(
+                panel.chapter_id,
+                "panel_binding_updated",
+                panel.id,
+                {
+                    "panel_id": panel.id,
+                    "slot": body.slot,
+                    "slot_index": body.slot_index,
+                    "asset_id": body.asset_id,
+                },
+            )
+
+        anyio.from_thread.run(_emit)
+    except Exception as e:  # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).warning(f"WS emit failed: {e}")
+
     return PanelBindingResponse(
         panel_id=panel.id,
         spec_json=panel.spec_json,
