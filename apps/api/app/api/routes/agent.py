@@ -494,7 +494,7 @@ class PanelInput(BaseModel):
     characters: list[str] = []
 
 class GeneratePanelsRequest(BaseModel):
-    project_id: str
+    project_id: Optional[str] = None
     art_style: ArtStyle
     characters: list[Character]
     scenes: list[Scene]
@@ -787,9 +787,39 @@ async def generate_panel_images(
                     height=720,
                 )
                 result = await provider.generate(request)
-                if result.success and result.image_url:
-                    return PanelResult(id=panel.id, image_url=result.image_url, status="success")
-                return PanelResult(id=panel.id, status="failed", error=result.error or "Generation returned no image")
+                if not (result.success and result.image_url):
+                    return PanelResult(
+                        id=panel.id,
+                        status="failed",
+                        error=result.error or "Generation returned no image",
+                    )
+
+                # Persist Doubao temp URL to MinIO immediately so downstream
+                # consumers (commit-to-studio, asset hub) can rely on the key.
+                try:
+                    from app.services.agent_commit.image_fetcher import (
+                        fetch_and_persist,
+                        ImageFetchError,
+                    )
+                    project_id_for_path = getattr(req, "project_id", None) or "unknown"
+                    minio_key = await fetch_and_persist(
+                        result.image_url,
+                        project_id=project_id_for_path,
+                        asset_type="panel",
+                        name_hint=f"ep{episode_number}-p{panel.id}",
+                    )
+                    return PanelResult(id=panel.id, image_url=minio_key, status="success")
+                except ImageFetchError as persist_err:
+                    logger.warning(
+                        f"[Episode {episode_number}] Panel '{panel.id}' MinIO persist failed; "
+                        f"returning temp URL: {persist_err}"
+                    )
+                    return PanelResult(
+                        id=panel.id,
+                        image_url=result.image_url,
+                        status="success",
+                        error=f"minio persist failed: {persist_err}",
+                    )
             except Exception as e:
                 logger.warning(f"[Episode {episode_number}] Panel '{panel.id}' image failed: {e}")
                 return PanelResult(id=panel.id, status="failed", error=str(e))
