@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -17,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Save, Play, Download, Upload, ChevronDown, Zap, Sparkles, ArrowLeft, Wand2, Film, Loader2 } from "lucide-react"
+import { Save, Play, Download, Upload, ChevronDown, Zap, Sparkles, ArrowLeft, Wand2, Film, Loader2, Bot } from "lucide-react"
 import { useStudioStore } from '@/lib/store/studioStore'
 import { useShallow } from 'zustand/react/shallow'
 import { useToast } from '@/hooks/use-toast'
@@ -59,9 +60,23 @@ export function StudioTopbar({ projectId, chapterId, projectName, chapterTitle }
     useShallow(s => ({ saveChapterDraft: s.saveChapterDraft, exportChapterSpec: s.exportChapterSpec, selectedPanelId: s.selectedPanelId, panelList: s.panelList, script: s.script, setPanelList: s.setPanelList, selectPanel: s.selectPanel, canRender: s.canRender, pendingAssetsCount: s.pendingAssetsCount }))
   )
   const { toast } = useToast()
+  const router = useRouter()
   const [showImportModal, setShowImportModal] = useState(false)
   const [selectedProvider, setSelectedProvider] = useState<RenderProvider>('deepseek')
   const [batchVideoRunning, setBatchVideoRunning] = useState(false)
+  const [sourceConversationId, setSourceConversationId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!chapterId) return
+    chaptersApi.get(chapterId).then((ch: any) => {
+      const src = ch?.layout_json?.source
+      if (src?.type === 'agent' && src?.conversation_id) {
+        setSourceConversationId(src.conversation_id)
+      } else {
+        setSourceConversationId(null)
+      }
+    }).catch(() => {})
+  }, [chapterId])
   // const [isGenerating, setIsGenerating] = useState(false) // Moved to hook
 
   // 工作流状态判断
@@ -296,6 +311,17 @@ export function StudioTopbar({ projectId, chapterId, projectName, chapterTitle }
               {chapterTitle || "加载中..."}
             </span>
           </div>
+          {sourceConversationId && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push(`/chat/${projectId}?conversation=${sourceConversationId}`)}
+              className="gap-1"
+            >
+              <Bot className="w-4 h-4" />
+              返回 Agent
+            </Button>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
