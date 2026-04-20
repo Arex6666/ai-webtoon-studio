@@ -160,7 +160,7 @@ function ControlMapBadge({
 // ─── main component ───────────────────────────────────────────────────────────
 
 export function AssetsTab() {
-    const { chapterId, projectId, selectedPanelId, characters: storeCharacters, scenes: storeScenes } =
+    const { chapterId, projectId, selectedPanelId, characters: storeCharacters, scenes: storeScenes, panelSpecs } =
         useStudioStore(
             useShallow((s) => ({
                 chapterId: s.chapterId,
@@ -168,6 +168,7 @@ export function AssetsTab() {
                 selectedPanelId: s.selectedPanelId,
                 characters: s.characters,
                 scenes: s.scenes,
+                panelSpecs: s.panelSpecs,
             }))
         )
 
@@ -196,6 +197,7 @@ export function AssetsTab() {
         type: 'character' | 'scene'
         panelId: string
         slotIndex?: number
+        currentAssetId?: string | null
         onBound?: () => Promise<void> | void
     } | null>(null)
     const [projectAssets, setProjectAssets] = useState<Array<{ id: string; name: string; thumbnail_url?: string }>>([])
@@ -459,12 +461,16 @@ export function AssetsTab() {
                                                             })
                                                             return
                                                         }
+                                                        const spec = panelSpecs[selectedPanelId] as any
+                                                        const currentAssetId =
+                                                            spec?.characters?.[0]?.asset_id ?? null
                                                         setBindingTarget({
                                                             id: char.id,
                                                             name: char.name,
                                                             type: 'character',
                                                             panelId: selectedPanelId,
                                                             slotIndex: 0,
+                                                            currentAssetId,
                                                         })
                                                     }}
                                                 >
@@ -743,6 +749,33 @@ export function AssetsTab() {
                         <Button variant="outline" onClick={() => setBindingTarget(null)}>
                             取消
                         </Button>
+                        {bindingTarget?.currentAssetId && (
+                            <Button
+                                variant="ghost"
+                                onClick={async () => {
+                                    if (!bindingTarget) return
+                                    try {
+                                        await panelsApi.updateBindings(bindingTarget.panelId, {
+                                            slot: bindingTarget.type === 'scene' ? 'scene' : 'character',
+                                            slot_index: bindingTarget.slotIndex ?? 0,
+                                            asset_id: null,
+                                        })
+                                        toast({ title: '已清除绑定' })
+                                        const onBound = bindingTarget.onBound
+                                        setBindingTarget(null)
+                                        if (onBound) await onBound()
+                                    } catch (err) {
+                                        toast({
+                                            title: '清除失败',
+                                            description: err instanceof Error ? err.message : String(err),
+                                            variant: 'destructive',
+                                        })
+                                    }
+                                }}
+                            >
+                                清除绑定
+                            </Button>
+                        )}
                         <Button
                             variant="secondary"
                             onClick={() => {
