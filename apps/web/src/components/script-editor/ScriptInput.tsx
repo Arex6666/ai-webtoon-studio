@@ -41,39 +41,37 @@ const STYLE_OPTIONS = [
 export function ScriptInput({ onParsed, onError, chapterId }: ScriptInputProps) {
   const [script, setScript] = useState('');
   const [style, setStyle] = useState('korean_webtoon');
-  const [isParsing, setIsParsing] = useState(false);
   const [result, setResult] = useState<ScriptParseResult | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
+  const [status, setStatus] = useState<
+    'empty' | 'edited' | 'parsing' | 'preview' | 'generating' | 'done' | 'error'
+  >('empty');
+  const [error, setError] = useState<string | null>(null);
+  const [storyboardJobId, setStoryboardJobId] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   const handleParse = useCallback(async () => {
     if (!script.trim()) {
-      onError?.('请输入剧本内容');
+      setError('请输入剧本内容');
+      setStatus('error');
       return;
     }
-
-    setIsParsing(true);
+    setStatus('parsing');
+    setError(null);
     try {
       const response = await fetch(`${api.baseUrl}/api/v1/brain/parse-script`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          script_text: script,
-          style_hint: style,
-        }),
+        body: JSON.stringify({ script_text: script, style_hint: style }),
       });
-
-      if (!response.ok) {
-        throw new Error('解析失败');
-      }
-
+      if (!response.ok) throw new Error('解析失败');
       const data: ScriptParseResult = await response.json();
       setResult(data);
-      setShowPreview(true);
+      setStatus('preview');
       onParsed?.(data);
     } catch (err) {
+      setError(err instanceof Error ? err.message : '解析失败');
+      setStatus('error');
       onError?.(err instanceof Error ? err.message : '解析失败');
-    } finally {
-      setIsParsing(false);
     }
   }, [script, style, onParsed, onError]);
 
@@ -108,7 +106,12 @@ export function ScriptInput({ onParsed, onError, chapterId }: ScriptInputProps) 
       <div className="flex-1 p-4">
         <textarea
           value={script}
-          onChange={(e) => setScript(e.target.value)}
+          onChange={(e) => {
+            setScript(e.target.value);
+            if (status !== 'generating' && status !== 'parsing') {
+              setStatus(e.target.value.trim() ? 'edited' : 'empty');
+            }
+          }}
           placeholder=""
           className="w-full h-full p-4 bg-zinc-800/50 border border-zinc-700 rounded-lg text-zinc-100 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-sm leading-relaxed"
         />
@@ -136,20 +139,15 @@ export function ScriptInput({ onParsed, onError, chapterId }: ScriptInputProps) 
           )}
         </div>
         <div className="flex items-center gap-2">
-          {result && (
-            <button
-              onClick={() => setShowPreview(!showPreview)}
-              className="px-4 py-2 text-sm text-zinc-300 hover:text-white transition-colors"
-            >
-              {showPreview ? '隐藏预览' : '预览分镜'}
-            </button>
+          {error && status === 'error' && (
+            <span className="text-sm text-rose-400">{error}</span>
           )}
           <button
             onClick={handleParse}
-            disabled={isParsing || !script.trim()}
+            disabled={status === 'parsing' || status === 'generating' || !script.trim()}
             className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
           >
-            {isParsing ? (
+            {status === 'parsing' ? (
               <>
                 <span className="animate-spin">⏳</span>
                 解析中...
@@ -164,7 +162,7 @@ export function ScriptInput({ onParsed, onError, chapterId }: ScriptInputProps) 
       </div>
 
       {/* 预览面板 */}
-      {showPreview && result && (
+      {status === 'preview' && result && (
         <div className="border-t border-zinc-800 max-h-80 overflow-y-auto">
           <div className="p-4 space-y-3">
             {result.continuity_issues.length > 0 && (
