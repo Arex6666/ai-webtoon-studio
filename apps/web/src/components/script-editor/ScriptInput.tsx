@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { api } from '@/lib/api';
+import { connect as wsConnect } from '@/lib/ws/client';
 
 interface ParsedPanel {
   panel_index: number;
@@ -48,6 +49,38 @@ export function ScriptInput({ onParsed, onError, chapterId }: ScriptInputProps) 
   const [error, setError] = useState<string | null>(null);
   const [storyboardJobId, setStoryboardJobId] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+
+  useEffect(() => {
+    if (!storyboardJobId || !chapterId) return;
+
+    const connection = wsConnect();
+    const unsubscribe = connection.subscribeChapter('', chapterId, (event) => {
+      if (event.type === 'job_progress') {
+        const { jobId, progress: prog } = event.payload;
+        if (jobId !== storyboardJobId) return;
+        if (typeof prog === 'number') {
+          const approxTotal = result?.panels?.length ?? 1;
+          setProgress({
+            done: Math.round(prog * approxTotal),
+            total: approxTotal,
+          });
+        }
+      } else if (event.type === 'job_status') {
+        const { jobId, status, error: jobError } = event.payload;
+        if (jobId !== storyboardJobId) return;
+        if (status === 'Succeeded') {
+          setStatus('done');
+        } else if (status === 'Failed') {
+          setStatus('error');
+          setError(jobError || '生成失败');
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [storyboardJobId, chapterId, result]);
 
   const handleParse = useCallback(async () => {
     if (!script.trim()) {
