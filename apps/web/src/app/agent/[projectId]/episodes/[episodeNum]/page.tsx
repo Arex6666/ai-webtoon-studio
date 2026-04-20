@@ -2,13 +2,15 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Loader2, ArrowLeft, Sparkles, FileText, Film } from 'lucide-react'
+import { Loader2, ArrowLeft, Sparkles, FileText, Film, Play } from 'lucide-react'
 import Link from 'next/link'
 
 import { AgentChat, AgentMessage } from '@/components/agent/AgentChat'
 import { VideoCard, VideoCardData, PanelImage, PanelMeta } from '@/components/agent/VideoCard'
 import { conversationsApi } from '@/lib/api'
+import { agentApi } from '@/lib/api/services'
 import { Button } from '@/components/ui/button'
+import { useToast } from '@/hooks/use-toast'
 import {
     EpisodeScriptData,
     generateEpisodeScript,
@@ -41,6 +43,84 @@ export default function EpisodeConversationPage() {
     const videoCardDataRef = useRef<VideoCardData | null>(null)
     const loadStartedRef = useRef(false)
     const hasAutoTriggered = useRef(false)
+
+    // Open-in-Studio state
+    const { toast } = useToast()
+    const [committing, setCommitting] = useState(false)
+
+    const handleOpenInStudio = useCallback(async () => {
+        if (!conversationId) {
+            toast({ title: '缺少对话上下文', variant: 'destructive' })
+            return
+        }
+        if (!scriptData) {
+            toast({ title: '剧本尚未生成', variant: 'destructive' })
+            return
+        }
+        setCommitting(true)
+        try {
+            const payload = {
+                conversation_id: conversationId,
+                episode_number: episodeNum,
+                episode_title: scriptData.episode_title ?? '',
+                outline_summary: scriptData.story_summary ?? '',
+                art_style: scriptData.art_style ?? {},
+                characters: (scriptData.characters ?? []).map((c) => ({
+                    name: c.name,
+                    visual_prompt: c.visual_prompt ?? c.description ?? '',
+                    temp_image_url: c.image_url,
+                    appearance_traits: [] as string[],
+                    personality_traits: [] as string[],
+                    wardrobe_notes: undefined as string | undefined,
+                })),
+                scenes: (scriptData.scenes ?? []).map((s) => ({
+                    name: s.name,
+                    visual_prompt: s.visual_prompt ?? s.description ?? '',
+                    temp_image_url: s.image_url,
+                    time_of_day: undefined as string | undefined,
+                    weather: undefined as string | undefined,
+                    mood: undefined as string | undefined,
+                })),
+                panels: (scriptData.panels ?? []).map((p, idx) => ({
+                    id: p.id,
+                    order: idx,
+                    scene_name: p.scene_name,
+                    characters: p.characters ?? [],
+                    scene_description: p.scene_description ?? '',
+                    dialogue: p.dialogue,
+                    shot_type: 'MS',
+                    camera_angle: 'eye-level',
+                    emotion: undefined as string | undefined,
+                    composition: p.composition,
+                    temp_image_url: panelImages[p.id] ?? p.image_url,
+                })),
+            }
+            const result = await agentApi.commitToStudio(projectId, payload)
+            if (result.status === 'already_exists') {
+                toast({ title: '已打开已有章节', description: result.chapter_title })
+            } else {
+                toast({
+                    title: '已创建章节',
+                    description: `${result.created_panels} 分镜 · ${result.created_assets.characters} 角色 · ${result.created_assets.scenes} 场景`,
+                })
+                if (result.warnings.length > 0) {
+                    toast({
+                        title: '部分图片未能保存',
+                        description: `${result.warnings.length} 条警告，可在 Studio 手动上传`,
+                    })
+                }
+            }
+            router.push(result.studio_url)
+        } catch (err) {
+            toast({
+                title: '提交失败',
+                description: err instanceof Error ? err.message : String(err),
+                variant: 'destructive',
+            })
+        } finally {
+            setCommitting(false)
+        }
+    }, [conversationId, episodeNum, scriptData, panelImages, projectId, router, toast])
 
     // ─── Load conversation history and context ───
     useEffect(() => {
@@ -656,14 +736,39 @@ export default function EpisodeConversationPage() {
                         {phase === 'done' && '全部完成'}
                     </p>
                 </div>
-                {(phase === 'video' || phase === 'done') && (
-                    <div className="ml-auto flex gap-2">
+                <div className="ml-auto flex items-center gap-2">
+                    {scriptData && (
+                        <Button
+                            onClick={handleOpenInStudio}
+                            disabled={committing || (scriptData.panels?.length ?? 0) === 0}
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                            title={
+                                (scriptData.panels?.length ?? 0) === 0
+                                    ? '暂无分镜，无法打开 Studio'
+                                    : '将本集的剧本、角色、场景、分镜提交到 Studio'
+                            }
+                        >
+                            {committing ? (
+                                <>
+                                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                                    提交中…
+                                </>
+                            ) : (
+                                <>
+                                    <Play className="h-3.5 w-3.5 mr-1.5" />
+                                    在 Studio 打开
+                                </>
+                            )}
+                        </Button>
+                    )}
+                    {(phase === 'video' || phase === 'done') && (
                         <Button variant="outline" size="sm" className="text-xs">
                             <FileText className="h-3.5 w-3.5 mr-1.5" />
                             导出剧本
                         </Button>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
 
             {/* Chat */}
