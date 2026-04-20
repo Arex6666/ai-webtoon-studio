@@ -20,6 +20,16 @@ class TestApplyPanelBinding:
             "asset_version_id": "ver-9",
         }
 
+    def test_character_rebind_clears_stale_version(self):
+        """Rebinding with asset_version_id=None must drop the prior version pin."""
+        spec = {"characters": [{"name": "Alice", "asset_id": "asset-1", "asset_version_id": "v1"}]}
+        out = apply_panel_binding(spec, "character", 0, "asset-2", None)
+        assert out["characters"][0] == {
+            "name": "Alice",
+            "asset_id": "asset-2",
+        }
+        assert "asset_version_id" not in out["characters"][0]
+
     def test_character_clear(self):
         spec = {"characters": [{"name": "Alice", "asset_id": "asset-1", "asset_version_id": "v"}]}
         out = apply_panel_binding(spec, "character", 0, None, None)
