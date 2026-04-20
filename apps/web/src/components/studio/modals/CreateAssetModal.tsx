@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -29,9 +29,18 @@ type AssetFormValues = z.infer<typeof assetSchema>
 interface CreateAssetModalProps {
     open: boolean
     onOpenChange: (open: boolean) => void
+    defaultType?: 'character' | 'scene' | 'prop' | 'style'
+    defaultName?: string
+    onCreated?: (asset: { id: string; name: string }) => Promise<void> | void
 }
 
-export function CreateAssetModal({ open, onOpenChange }: CreateAssetModalProps) {
+export function CreateAssetModal({
+    open,
+    onOpenChange,
+    defaultType,
+    defaultName,
+    onCreated,
+}: CreateAssetModalProps) {
     const { projectId, chapterId, setStudioData } = useStudioStore(
     useShallow(s => ({ projectId: s.projectId, chapterId: s.chapterId, setStudioData: s.setStudioData }))
   )
@@ -42,11 +51,23 @@ export function CreateAssetModal({ open, onOpenChange }: CreateAssetModalProps) 
     const form = useForm<AssetFormValues>({
         resolver: zodResolver(assetSchema),
         defaultValues: {
-            name: '',
+            name: defaultName ?? '',
             description: '',
-            type: 'character',
+            type: defaultType ?? 'character',
         }
     })
+
+    // Sync defaults when they change (e.g. dialog reopened with new target)
+    useEffect(() => {
+        if (open) {
+            form.reset({
+                name: defaultName ?? '',
+                description: '',
+                type: defaultType ?? 'character',
+            })
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, defaultName, defaultType])
 
     // Watch type to change tabs
     const type = form.watch('type')
@@ -94,6 +115,11 @@ export function CreateAssetModal({ open, onOpenChange }: CreateAssetModalProps) 
                 const { chaptersApi } = await import('@/lib/api/services')
                 const studioData = await chaptersApi.getStudio(chapterId)
                 setStudioData(studioData)
+            }
+
+            // Invoke onCreated callback (e.g. for auto-binding)
+            if (onCreated) {
+                await onCreated({ id: asset.id, name: asset.name })
             }
 
             onOpenChange(false)

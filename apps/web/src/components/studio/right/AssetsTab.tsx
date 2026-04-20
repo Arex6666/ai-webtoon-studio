@@ -43,6 +43,7 @@ import {
     CheckCircle,
     XCircle,
 } from 'lucide-react'
+import { CreateAssetModal } from '@/components/studio/modals/CreateAssetModal'
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -199,6 +200,13 @@ export function AssetsTab() {
     } | null>(null)
     const [projectAssets, setProjectAssets] = useState<Array<{ id: string; name: string; thumbnail_url?: string }>>([])
     const [generatingImage, setGeneratingImage] = useState<string | null>(null)
+
+    // ── create-asset dialog seed (fired from binding dialog's "Create new asset") ──
+    const [createSeed, setCreateSeed] = useState<{
+        type: 'character' | 'scene'
+        name: string
+        onCreated: (asset: { id: string; name: string }) => Promise<void>
+    } | null>(null)
 
     // ── load assets lock ──
     const loadLock = async () => {
@@ -738,9 +746,22 @@ export function AssetsTab() {
                         <Button
                             variant="secondary"
                             onClick={() => {
-                                // TODO: wire up asset creation flow
-                                console.log('Create new asset for:', bindingTarget?.name)
-                                setBindingTarget(null)
+                                if (!bindingTarget || !projectId) return
+                                setCreateSeed({
+                                    type: bindingTarget.type,
+                                    name: bindingTarget.name,
+                                    onCreated: async (newAsset) => {
+                                        await panelsApi.updateBindings(bindingTarget.panelId, {
+                                            slot: bindingTarget.type === 'scene' ? 'scene' : 'character',
+                                            slot_index: bindingTarget.slotIndex ?? 0,
+                                            asset_id: newAsset.id,
+                                        })
+                                        toast({ title: '新资产已创建并绑定', description: newAsset.name })
+                                        setBindingTarget(null)
+                                        setCreateSeed(null)
+                                        if (bindingTarget.onBound) await bindingTarget.onBound()
+                                    },
+                                })
                             }}
                         >
                             <Wand2 className="w-4 h-4 mr-1" />
@@ -749,6 +770,17 @@ export function AssetsTab() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* ── create asset modal (triggered from binding dialog) ── */}
+            {createSeed && projectId && (
+                <CreateAssetModal
+                    open={true}
+                    onOpenChange={(open) => { if (!open) setCreateSeed(null) }}
+                    defaultType={createSeed.type}
+                    defaultName={createSeed.name}
+                    onCreated={createSeed.onCreated}
+                />
+            )}
         </div>
     )
 }
