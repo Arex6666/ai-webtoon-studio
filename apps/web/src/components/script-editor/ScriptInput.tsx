@@ -80,7 +80,7 @@ export function ScriptInput({ onParsed, onError, chapterId }: ScriptInputProps) 
     return () => {
       unsubscribe();
     };
-  }, [storyboardJobId, chapterId, result]);
+  }, [storyboardJobId, chapterId, result?.panels?.length]);
 
   const handleParse = useCallback(async () => {
     if (!script.trim()) {
