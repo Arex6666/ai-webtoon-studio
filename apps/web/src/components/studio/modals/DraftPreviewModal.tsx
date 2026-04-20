@@ -14,6 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useStudioStore } from '@/lib/store/studioStore'
+import { useShallow } from 'zustand/react/shallow'
 import { chaptersApi } from '@/lib/api/services'
 import {
     Check,
@@ -106,7 +107,9 @@ export function DraftPreviewModal({
     const [qaResult, setQaResult] = useState<QAResult | null>(null)
     const [loadingQA, setLoadingQA] = useState(false)
     const [conflictError, setConflictError] = useState<string | null>(null)
-    const { setStudioData, chapterId } = useStudioStore()
+    const { setStudioData, chapterId } = useStudioStore(
+    useShallow(s => ({ setStudioData: s.setStudioData, chapterId: s.chapterId }))
+  )
 
     // 加载 QA 评分
     useEffect(() => {
@@ -414,7 +417,7 @@ export function DraftPreviewModal({
                                                     {panel.characters.length > 0 && (
                                                         <span className="flex items-center gap-1">
                                                             <User className="w-3 h-3" />
-                                                            {panel.characters.join(', ')}
+                                                            {panel.characters.map((c: unknown) => typeof c === 'string' ? c : (c as { name?: string }).name || '').join(', ')}
                                                         </span>
                                                     )}
                                                     {panel.location && (

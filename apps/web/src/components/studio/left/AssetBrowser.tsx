@@ -5,6 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
 import { useStudioStore } from "@/lib/store/studioStore"
+import { useShallow } from "zustand/react/shallow"
 import { assetsApi } from "@/lib/api/services"
 import { Plus, Upload, User, Map, Palette, Box, Trash2, Loader2 } from "lucide-react"
 import {
@@ -23,7 +24,9 @@ import { AssetDetailModal } from "../modals/AssetDetailModal"
 
 
 export function AssetBrowser() {
-  const { characters, scenes, styles, props, projectId, chapterId, setStudioData } = useStudioStore()
+  const { characters, scenes, styles, props, projectId, chapterId, setStudioData } = useStudioStore(
+    useShallow(s => ({ characters: s.characters, scenes: s.scenes, styles: s.styles, props: s.props, projectId: s.projectId, chapterId: s.chapterId, setStudioData: s.setStudioData }))
+  )
   const [isClearing, setIsClearing] = useState(false)
 
   const hasAnyAssets = characters.length > 0 || scenes.length > 0 || styles.length > 0 || props.length > 0

@@ -16,6 +16,7 @@ export interface JobStatusResponse {
   status: JobStatus
   progress: number
   message?: string
+  agent?: string
   result?: Record<string, unknown>
   error?: string
   created_at?: string
@@ -30,7 +31,7 @@ export const jobApi = {
     apiGet<JobStatusResponse>(`/api/v1/jobs/${jobId}`),
 
   list: (chapterId: string) =>
-    apiGet<JobStatusResponse[]>(`/api/v1/jobs?chapter_id=${chapterId}`),
+    apiGet<{ items: JobStatusResponse[]; total: number }>(`/api/v1/jobs/chapter/${chapterId}`),
 
   cancel: (jobId: string) =>
     apiPost<{ job_id: string; status: string }>(`/api/v1/jobs/${jobId}/cancel`, {}),

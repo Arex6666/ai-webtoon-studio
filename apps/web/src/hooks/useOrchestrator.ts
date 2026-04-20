@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import { orchestratorApi } from '@/lib/api/orchestrator'
 import { Message, AgentMode } from '@/components/studio/chat/DirectorChat'
-import { useToast } from '@/components/ui/use-toast'
+import { useToast } from '@/hooks/use-toast'
 
 interface UseOrchestratorProps {
     projectId: string

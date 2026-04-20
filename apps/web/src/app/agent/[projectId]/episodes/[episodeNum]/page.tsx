@@ -6,7 +6,7 @@ import { Loader2, ArrowLeft, Sparkles, FileText, Film } from 'lucide-react'
 import Link from 'next/link'
 
 import { AgentChat, AgentMessage } from '@/components/agent/AgentChat'
-import { VideoCard, VideoCardData, PanelImage } from '@/components/agent/VideoCard'
+import { VideoCard, VideoCardData, PanelImage, PanelMeta } from '@/components/agent/VideoCard'
 import { conversationsApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import {
@@ -250,9 +250,20 @@ export default function EpisodeConversationPage() {
             setPanelImages(images)
 
             const successCount = Object.keys(images).length
-            const resultContent = failed.length === 0
-                ? `分镜首帧全部生成完成！共 **${successCount}** 张。\n\n可以点击下方按钮生成视频，或通过对话调整分镜内容。`
-                : `分镜首帧生成完成：**${successCount}** 张成功，**${failed.length}** 张失败（${failed.join(', ')}）。\n\n你可以说"重新生成 ${failed[0]}"来重试，或直接生成视频。`
+            const statusLine = failed.length === 0
+                ? `分镜首帧全部生成完成！共 **${successCount}** 张。`
+                : `分镜首帧生成完成：**${successCount}** 张成功，**${failed.length}** 张失败（${failed.join(', ')}）。`
+
+            // Build image grid in markdown
+            const imageLines = Object.entries(images)
+                .map(([panelId, url]) => `![分镜${panelId}](${url})`)
+                .join('\n\n')
+
+            const hintLine = failed.length === 0
+                ? `可以点击下方按钮生成视频，或通过对话调整分镜内容。`
+                : `你可以说"重新生成 ${failed[0]}"来重试，或直接生成视频。`
+
+            const resultContent = `${statusLine}\n\n${imageLines}\n\n${hintLine}`
 
             // Update script markdown with panel images
             const updatedMarkdown = formatScriptAsMarkdown(scriptData, images)
@@ -436,11 +447,20 @@ export default function EpisodeConversationPage() {
 
         if (panels.length === 0) return
 
-        // Build per-panel duration map from script data
+        // Build per-panel duration map and structured metadata from script data
         const panelDurations: Record<number, number> = {}
+        const panelMetas: Record<number, PanelMeta> = {}
         const panelsWithImages = scriptData.panels.filter(p => panelImages[p.id])
         panelsWithImages.forEach((p, i) => {
             if (p.duration_sec) panelDurations[i] = p.duration_sec
+            panelMetas[i] = {
+                camera_movement: p.camera_movement,
+                composition: p.composition,
+                scene_description: p.scene_description,
+                time_of_day: p.time_of_day,
+                weather: p.weather,
+                duration_sec: p.duration_sec,
+            }
         })
 
         const initialData: VideoCardData = {
@@ -450,6 +470,7 @@ export default function EpisodeConversationPage() {
             motionPrompt: scriptData.panels[0]?.camera_movement || '缓慢推进，镜头微微摇动',
             durationSec: 5,
             panelDurations: Object.keys(panelDurations).length > 0 ? panelDurations : undefined,
+            panelMetas: Object.keys(panelMetas).length > 0 ? panelMetas : undefined,
             jobs: [],
         }
         videoCardDataRef.current = initialData

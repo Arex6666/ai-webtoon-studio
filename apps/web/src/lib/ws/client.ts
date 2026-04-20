@@ -89,11 +89,16 @@ export function connect(): WsConnection {
                 }
             }
 
-            // 如果使用真实 WebSocket，任务进度由后端推送
-            // 这里仍然启动 Mock 作为备用（如果后端没有推送）
+            // 真实 WS 模式下，通过统一 Job API 触发后端任务
             if (realWsClient && realWsClient.isConnected()) {
-                // 真实模式下，后端会通过 WS 推送进度
-                // 返回一个空的取消函数
+                import('@/lib/api/jobApi').then(({ jobApi }) => {
+                    jobApi.create({
+                        type: 'image',
+                        target_id: job.panelId || '',
+                        provider: job.provider || 'mock',
+                        params: { chapter_id: job.chapterId },
+                    }).catch(err => console.error('[WS] Failed to create image job:', err))
+                })
                 return () => { }
             }
 
@@ -116,8 +121,46 @@ export function connect(): WsConnection {
                 }
             }
 
-            // 真实模式
+            // 真实 WS 模式下，通过统一 Job API 触发后端任务
             if (realWsClient && realWsClient.isConnected()) {
+                import('@/lib/api/jobApi').then(({ jobApi }) => {
+                    const startFrameUrl =
+                        typeof clip.startFrame === 'string'
+                            ? clip.startFrame
+                            : clip.startFrame?.url || ''
+                    const endFrameUrl =
+                        typeof clip.endFrame === 'string'
+                            ? clip.endFrame
+                            : clip.endFrame?.url
+                    const defaultModel =
+                        clip.provider === 'tongyi'
+                            ? 'wanx2.1-i2v-plus'
+                            : clip.provider === 'doubao'
+                                ? 'jimeng-video-v1'
+                                : undefined
+
+                    jobApi.create({
+                        type: 'video',
+                        target_id: clip.id || '',
+                        provider: clip.provider || 'mock',
+                        params: {
+                            start_frame_url: startFrameUrl,
+                            end_frame_url: clip.motionMode === 'dual_keyframe' ? endFrameUrl : undefined,
+                            motion_prompt: clip.motionPrompt || '',
+                            negative_prompt: clip.negative || '',
+                            motion_mode: clip.motionMode || 'single_keyframe',
+                            duration_sec: clip.durationSec || 3,
+                            fps: clip.fps || 24,
+                            width: clip.startFrame?.w || 1080,
+                            height: clip.startFrame?.h || 1920,
+                            resolution: `${clip.startFrame?.w || 1080}x${clip.startFrame?.h || 1920}`,
+                            motion_strength: 0.5,
+                            prompt_extend: true,
+                            model: defaultModel,
+                            source: 'ws_client',
+                        },
+                    }).catch(err => console.error('[WS] Failed to create video job:', err))
+                })
                 return () => { }
             }
 
@@ -140,8 +183,16 @@ export function connect(): WsConnection {
                 }
             }
 
-            // 真实模式
+            // 真实 WS 模式下，通过统一 Job API 触发后端任务
             if (realWsClient && realWsClient.isConnected()) {
+                import('@/lib/api/jobApi').then(({ jobApi }) => {
+                    jobApi.create({
+                        type: 'export',
+                        target_id: exportSpec.chapterId || '',
+                        provider: 'local',
+                        params: { export_type: 'strip_png' },
+                    }).catch(err => console.error('[WS] Failed to create export job:', err))
+                })
                 return () => { }
             }
 

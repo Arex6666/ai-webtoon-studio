@@ -63,7 +63,8 @@ const cardTypeConfig = {
 }
 
 function ActionCardComponent({ card, onAction }: { card: ActionCard; onAction: (actionId: string) => void }) {
-    const config = cardTypeConfig[card.type]
+    const config = cardTypeConfig[card.type as keyof typeof cardTypeConfig]
+        ?? { icon: FileText, color: 'text-[#71717A]', bg: 'bg-[#71717A]/10', border: 'border-[#71717A]/30', label: card.type }
 
     return (
         <motion.div
@@ -111,7 +112,7 @@ function ActionCardComponent({ card, onAction }: { card: ActionCard; onAction: (
 
             {/* Actions */}
             <div className="flex flex-wrap gap-2">
-                {card.actions.map((action) => (
+                {card.actions?.map((action) => (
                     <motion.button
                         key={action.id}
                         whileHover={{ scale: 1.02 }}

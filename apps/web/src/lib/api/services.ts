@@ -83,7 +83,7 @@ export const chaptersApi = {
 
     // 提交剧本并自动分镜（旧接口，保留兼容）
     submitScript: (id: string, scriptText: string, styleHint = "korean_webtoon") =>
-        apiPatch<ScriptSubmitResponse>(
+        apiPut<ScriptSubmitResponse>(
             `/api/v1/chapters/${id}/script?script_text=${encodeURIComponent(scriptText)}&style_hint=${styleHint}&auto_storyboard=true`
         ),
 

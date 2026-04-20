@@ -22,6 +22,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useStudioStore } from '@/lib/store/studioStore'
+import { useShallow } from 'zustand/react/shallow'
 import type { PanelSpec } from '@/lib/schema/panelSpec'
 import {
     Loader2,
@@ -83,7 +84,9 @@ interface PanelEditorModalProps {
 }
 
 export function PanelEditorModal({ panelId, onClose }: PanelEditorModalProps) {
-    const { panelSpecs, setPanelSpec, characters, panelList } = useStudioStore()
+    const { panelSpecs, setPanelSpec, characters, panelList } = useStudioStore(
+    useShallow(s => ({ panelSpecs: s.panelSpecs, setPanelSpec: s.setPanelSpec, characters: s.characters, panelList: s.panelList }))
+  )
     const [saving, setSaving] = useState(false)
 
     // Get current panel spec
@@ -115,7 +118,11 @@ export function PanelEditorModal({ panelId, onClose }: PanelEditorModalProps) {
             // Flatten dialogue lines to single text for simple editing
             const dialogueLines = spec.dialogue?.lines || []
             setDialogueText(dialogueLines.map(l => `${l.speaker}: ${l.text}`).join('\n'))
-            setSelectedCharacters(spec.characters || [])
+            setSelectedCharacters(
+                (spec.characters || []).map((c: unknown) =>
+                    typeof c === 'string' ? c : (c as { name?: string }).name || String(c)
+                )
+            )
         }
     }, [spec, panelId])
 
@@ -164,8 +171,31 @@ export function PanelEditorModal({ panelId, onClose }: PanelEditorModalProps) {
 
             setPanelSpec(panelId, updated)
             onClose()
+            return true
         } finally {
             setSaving(false)
+        }
+    }
+
+    const [rendering, setRendering] = useState(false)
+    const handleSaveAndRender = async () => {
+        if (!panelId) return
+        const saved = await handleSave()
+        if (!saved) return
+
+        setRendering(true)
+        try {
+            const currentChapterId = useStudioStore.getState().chapterId
+            if (!currentChapterId) return
+            const { renderApi, chaptersApi } = await import('@/lib/api/services')
+            await renderApi.renderPanel(panelId, true)
+            const studioData = await chaptersApi.getStudio(currentChapterId)
+            useStudioStore.getState().setStudioData(studioData)
+        } catch (err) {
+            console.error('Failed to render panel:', err)
+            alert('生成面板图失败: ' + (err instanceof Error ? err.message : '未知错误'))
+        } finally {
+            setRendering(false)
         }
     }
 
@@ -469,16 +499,24 @@ export function PanelEditorModal({ panelId, onClose }: PanelEditorModalProps) {
                 )}
 
                 <DialogFooter className="p-4 border-t border-white/5">
-                    <Button variant="outline" className="border-white/10" onClick={onClose}>
+                    <Button variant="outline" className="border-white/10" onClick={onClose} disabled={saving || rendering}>
                         取消
                     </Button>
-                    <Button onClick={handleSave} disabled={saving} className="gap-2">
+                    <Button variant="secondary" onClick={() => handleSave()} disabled={saving || rendering} className="gap-2 bg-zinc-800 hover:bg-zinc-700">
                         {saving ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
                             <Save className="w-4 h-4" />
                         )}
-                        保存
+                        仅保存
+                    </Button>
+                    <Button onClick={handleSaveAndRender} disabled={saving || rendering} className="gap-2 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white border-0">
+                        {rendering ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            <Sparkles className="w-4 h-4" />
+                        )}
+                        保存并生成图片
                     </Button>
                 </DialogFooter>
             </DialogContent>

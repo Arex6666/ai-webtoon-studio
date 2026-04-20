@@ -81,7 +81,7 @@ class JobStatusResponse(BaseModel):
     finished_at: Optional[str]
     cost: Dict[str, float]
     result: Optional[Dict[str, Any]]
-    error: Optional[Dict[str, Any]]
+    error: Optional[str]
 
 
 class JobListResponse(BaseModel):
@@ -138,8 +138,71 @@ def job_to_response(job: Job) -> JobStatusResponse:
         finished_at=job.finished_at.isoformat() if job.finished_at else None,
         cost={"estimated": job.cost_estimated, "used": job.cost_used},
         result=job.outputs_json,
-        error=job.error_json,
+        error=(
+            job.error_json.get('message', str(job.error_json))
+            if isinstance(job.error_json, dict)
+            else str(job.error_json) if job.error_json else None
+        ),
     )
+
+
+def _resolve_video_target(db: Session, target_id: str) -> tuple[str, str, Optional[str], Optional[str]]:
+    """
+    Resolve video target for unified job API.
+
+    Preferred input is `clip_id`; legacy callers may still pass `panel_id`.
+    If the panel has no clip yet, auto-create a Timeline + Clip so the user
+    doesn't have to manually add panels to the timeline before generating video.
+    """
+    clip = db.query(Clip).filter(Clip.id == target_id).first()
+    if clip:
+        timeline = db.query(Timeline).filter(Timeline.id == clip.timeline_id).first()
+        return clip.id, clip.panel_id, timeline.chapter_id if timeline else None, timeline.project_id if timeline else None
+
+    panel = db.query(Panel).filter(Panel.id == target_id).first()
+    if not panel:
+        raise HTTPException(status_code=404, detail=f"Clip/Panel not found: {target_id}")
+
+    clip = (
+        db.query(Clip)
+        .filter(Clip.panel_id == panel.id)
+        .order_by(Clip.updated_at.desc())
+        .first()
+    )
+    if not clip:
+        # Auto-create Timeline (if chapter doesn't have one) and Clip
+        chapter = db.query(Chapter).filter(Chapter.id == panel.chapter_id).first()
+        if not chapter:
+            raise HTTPException(status_code=404, detail=f"Chapter not found for panel {panel.id}")
+
+        timeline = db.query(Timeline).filter(Timeline.chapter_id == chapter.id).first()
+        if not timeline:
+            timeline = Timeline(
+                id=str(uuid.uuid4()),
+                chapter_id=chapter.id,
+            )
+            db.add(timeline)
+            db.flush()
+            logger.info(f"Auto-created timeline {timeline.id} for chapter {chapter.id}")
+
+        existing_count = db.query(Clip).filter(Clip.timeline_id == timeline.id).count()
+        clip = Clip(
+            id=str(uuid.uuid4()),
+            timeline_id=timeline.id,
+            panel_id=panel.id,
+            order_index=existing_count,
+            duration_sec=3.0,
+            fps=24,
+            provider="doubao",
+            status="Draft",
+        )
+        db.add(clip)
+        db.commit()
+        db.refresh(clip)
+        logger.info(f"Auto-created clip {clip.id} for panel {panel.id}")
+
+    timeline = db.query(Timeline).filter(Timeline.id == clip.timeline_id).first()
+    return clip.id, panel.id, timeline.chapter_id if timeline else panel.chapter_id, timeline.project_id if timeline else None
 
 
 # ============ Routes ============
@@ -151,39 +214,79 @@ async def create_unified_job(
     db: Session = Depends(get_db),
 ):
     """Unified job creation — single entry point for all job types."""
-    target_field_map = {
-        "image": "panel_id",
-        "video": "clip_id",
-        "storyboard": "chapter_id",
-        "export": "chapter_id",
-    }
-    target_field = target_field_map.get(req.type)
-    if not target_field:
+    if req.type == "image":
+        panel = db.query(Panel).filter(Panel.id == req.target_id).first()
+        if not panel:
+            raise HTTPException(status_code=404, detail=f"Panel not found: {req.target_id}")
+        job = create_job_record(
+            db=db,
+            job_type=req.type,
+            provider=req.provider,
+            inputs=req.params,
+            panel_id=panel.id,
+            chapter_id=panel.chapter_id,
+        )
+        task_target_id = panel.id
+
+    elif req.type == "video":
+        preferred_clip_id = None
+        if isinstance(req.params, dict):
+            clip_hint = req.params.get("clip_id")
+            if isinstance(clip_hint, str) and clip_hint.strip():
+                preferred_clip_id = clip_hint.strip()
+
+        if preferred_clip_id:
+            try:
+                clip_id, panel_id, chapter_id, project_id = _resolve_video_target(db, preferred_clip_id)
+            except HTTPException:
+                clip_id, panel_id, chapter_id, project_id = _resolve_video_target(db, req.target_id)
+        else:
+            clip_id, panel_id, chapter_id, project_id = _resolve_video_target(db, req.target_id)
+
+        merged_params = {**(req.params or {})}
+        merged_params.setdefault("clip_id", clip_id)
+        merged_params.setdefault("panel_id", panel_id)
+        job = create_job_record(
+            db=db,
+            job_type=req.type,
+            provider=req.provider,
+            inputs=merged_params,
+            panel_id=panel_id,
+            clip_id=clip_id,
+            chapter_id=chapter_id,
+            project_id=project_id,
+        )
+        task_target_id = clip_id
+
+    elif req.type in {"storyboard", "export"}:
+        job = create_job_record(
+            db=db,
+            job_type=req.type,
+            provider=req.provider,
+            inputs=req.params,
+            chapter_id=req.target_id,
+        )
+        task_target_id = req.target_id
+
+    else:
         raise HTTPException(status_code=400, detail=f"Unknown job type: {req.type}")
 
-    job = create_job_record(
-        db=db,
-        job_type=req.type,
-        provider=req.provider,
-        inputs=req.params,
-        **{target_field: req.target_id},
-    )
-
     TASK_MAP = {
-        "image": ("app.workers.image_worker.execute_image_job", "image", [job.id, req.target_id]),
-        "video": ("app.workers.video_worker.execute_video_job", "video", [job.id, req.target_id]),
-        "export": ("app.workers.export_worker.execute_export_job", "export", [job.id, req.target_id]),
+        "image": ("app.workers.image_worker.execute_image_job", "image", [job.id, task_target_id]),
+        "video": ("app.workers.video_worker.execute_video_job", "video", [job.id, task_target_id]),
+        "export": ("app.workers.export_worker.execute_export_job", "export", [job.id, task_target_id]),
     }
     if req.type in TASK_MAP:
         task_name, queue, args = TASK_MAP[req.type]
         celery_app.send_task(task_name, args=args, queue=queue)
     elif req.type == "storyboard":
-        from app.api.routes.chapters import run_storyboard_task
+        from app.api.routes.chapters.storyboard import run_storyboard_task
         background_tasks.add_task(
             run_storyboard_task,
             job_id=job.id,
             chapter_id=req.target_id,
             script=req.params.get("script", ""),
+            style_hint=req.params.get("style_hint", ""),
             provider=req.provider,
         )
 
@@ -369,7 +472,12 @@ async def cancel_job(job_id: str, db: Session = Depends(get_db)):
     job.status = "canceled"
     job.finished_at = datetime.utcnow()
     db.commit()
-    
-    # TODO: 实际取消 Celery 任务
-    
+
+    # Attempt to revoke the Celery task
+    try:
+        from app.celery_app import celery_app as _celery
+        _celery.control.revoke(job_id, terminate=True, signal="SIGTERM")
+    except Exception:
+        pass  # Best-effort: task may have already completed
+
     return {"message": "Job canceled", "job_id": job_id}

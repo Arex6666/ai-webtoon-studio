@@ -23,10 +23,13 @@ AI 漫剧（Webtoon/Motion Comic）开发工作台 - 商业级 AI 漫剧创作�
 cd docker
 docker compose up -d postgres redis minio
 
-# 2. 启动后端 (port: 8000)
+# 2. 启动后端 (API & Worker)
 cd apps/api
 pip install -r requirements.txt
+# 终端 1: 启动 API 服务
 python -m uvicorn app.main:app --reload --port 8000
+# 终端 2: 启动 Celery Worker (必须，用于执行 AI 分镜/视频等后台任务)
+celery -A app.celery_app:celery_app worker --loglevel=info --pool=solo
 
 # 3. 启动前端 (port: 3001)
 cd apps/web

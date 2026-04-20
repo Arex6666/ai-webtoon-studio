@@ -73,7 +73,7 @@ class StandardLLMService(BaseBrainService):
                     sys_msg["content"] += "\n请务必只返回纯 JSON 格式，不要包含 Markdown 标记。"
         
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=180.0) as client:
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
                     headers=headers,

@@ -7,9 +7,9 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from app.core.database import get_db
-from app.models import Export, ExportJob, Chapter
+from app.models import Export, ExportJob, Chapter, Job
 
-router = APIRouter(prefix="/exports", tags=["exports"])
+router = APIRouter(tags=["exports"])
 
 
 # ============ Schemas ============

@@ -1,6 +1,7 @@
 'use client'
 
 import { useStudioStore } from '@/lib/store/studioStore'
+import { useShallow } from 'zustand/react/shallow'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
@@ -37,7 +38,9 @@ export function InspectorLayers() {
     setLayerVisibility,
     setLayerOpacity,
     openFixModal,
-  } = useStudioStore()
+  } = useStudioStore(
+    useShallow(s => ({ selectedPanelId: s.selectedPanelId, getSelectedLayerPack: s.getSelectedLayerPack, getLayerPacksForPanel: s.getLayerPacksForPanel, selectLayerPack: s.selectLayerPack, selectedLayerPackIdByPanel: s.selectedLayerPackIdByPanel, viewer: s.viewer, setLayerVisibility: s.setLayerVisibility, setLayerOpacity: s.setLayerOpacity, openFixModal: s.openFixModal }))
+  )
 
   const layerPack = getSelectedLayerPack()
   const allVersions = selectedPanelId ? getLayerPacksForPanel(selectedPanelId) : []

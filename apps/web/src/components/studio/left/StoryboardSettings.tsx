@@ -12,6 +12,7 @@ import {
 import { Slider } from '@/components/ui/slider'
 import { Label } from '@/components/ui/label'
 import { useStudioStore } from '@/lib/store/studioStore'
+import { useShallow } from 'zustand/react/shallow'
 
 interface StoryboardConstraints {
     panelsMin: number
@@ -44,7 +45,9 @@ const DEFAULT_CONSTRAINTS: StoryboardConstraints = {
 
 export function StoryboardSettings() {
     const [isExpanded, setIsExpanded] = useState(false)
-    const { storyboardSettings, setStoryboardSettings } = useStudioStore()
+    const { storyboardSettings, setStoryboardSettings } = useStudioStore(
+    useShallow(s => ({ storyboardSettings: s.storyboardSettings, setStoryboardSettings: s.setStoryboardSettings }))
+  )
 
     // 使用 store 的值或默认值
     const settings: StoryboardSettingsState = storyboardSettings || {

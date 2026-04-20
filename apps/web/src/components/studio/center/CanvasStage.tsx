@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react'
 import { useStudioStore } from '@/lib/store/studioStore'
+import { useShallow } from 'zustand/react/shallow'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Crosshair, X, Image as ImageIcon } from 'lucide-react'
@@ -14,7 +15,9 @@ export function CanvasStage() {
     setRoi,
     clearRoi,
     setIsRoiSelecting,
-  } = useStudioStore()
+  } = useStudioStore(
+    useShallow(s => ({ selectedPanelId: s.selectedPanelId, getSelectedLayerPack: s.getSelectedLayerPack, viewer: s.viewer, setRoi: s.setRoi, clearRoi: s.clearRoi, setIsRoiSelecting: s.setIsRoiSelecting }))
+  )
 
   const layerPack = getSelectedLayerPack()
   const containerRef = useRef<HTMLDivElement>(null)

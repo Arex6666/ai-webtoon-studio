@@ -2,15 +2,19 @@
 
 import { useState } from 'react'
 import { useStudioStore } from "@/lib/store/studioStore"
+import { useShallow } from "zustand/react/shallow"
 import { PanelCard } from "./PanelCard"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
-import { Sparkles, Upload, FileText, Layers, Loader2 } from "lucide-react"
+import { Loader2, CheckCircle2, AlertCircle, Sparkles, Upload, FileText, Layers } from "lucide-react"
 import { useStoryboardGeneration } from "@/hooks/useStoryboardGeneration"
 import { PanelEditorModal } from "../modals/PanelEditorModal"
 
+
 export function StoryboardView() {
-  const { panelList, selectedPanelId, selectPanel } = useStudioStore()
+  const { panelList, selectedPanelId, selectPanel } = useStudioStore(
+    useShallow(s => ({ panelList: s.panelList, selectedPanelId: s.selectedPanelId, selectPanel: s.selectPanel }))
+  )
   const { isGenerating, generateStoryboard } = useStoryboardGeneration()
   const [editingPanelId, setEditingPanelId] = useState<string | null>(null)
 
@@ -51,7 +55,7 @@ export function StoryboardView() {
             {/* Actions */}
             <div className="flex flex-col sm:flex-row gap-3 justify-center relative">
               <Button
-                onClick={() => generateStoryboard('mock')}
+                onClick={() => generateStoryboard()}
                 disabled={isGenerating}
                 className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white gap-2 px-5 shadow-lg shadow-emerald-500/20"
               >
@@ -63,6 +67,7 @@ export function StoryboardView() {
                 导入分镜 JSON
               </Button>
             </div>
+
           </div>
         </div>
       </div>

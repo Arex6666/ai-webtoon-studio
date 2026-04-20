@@ -16,6 +16,7 @@ interface ExportModalProps {
 export function ExportModal({ open, onOpenChange }: ExportModalProps) {
     const params = useParams()
     const chapterId = params.chapterId as string
+    const { toast } = useToast()
 
     const [isStarted, setIsStarted] = useState(false)
 

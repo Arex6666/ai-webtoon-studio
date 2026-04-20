@@ -3,11 +3,14 @@
 import { useEffect, useState, useRef } from 'react'
 import { Textarea } from "@/components/ui/textarea"
 import { useStudioStore } from "@/lib/store/studioStore"
+import { useShallow } from "zustand/react/shallow"
 import { chaptersApi } from "@/lib/api/services"
 import { FileText, Check, Loader2, AlertCircle, Cloud } from "lucide-react"
 
 export function ScriptEditor() {
-  const { script, setScript, chapterId } = useStudioStore()
+  const { script, setScript, chapterId } = useStudioStore(
+    useShallow(s => ({ script: s.script, setScript: s.setScript, chapterId: s.chapterId }))
+  )
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [scriptVersion, setScriptVersion] = useState<string | null>(null)
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null)

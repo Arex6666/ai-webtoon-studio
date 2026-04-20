@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useStudioStore } from '@/lib/store/studioStore'
+import { useShallow } from 'zustand/react/shallow'
 import { connect, disconnect } from '@/lib/ws/client'
 import { StudioTopbar } from './StudioTopbar'
 import { StudioLayout } from './StudioLayout'
@@ -17,7 +18,9 @@ interface StudioShellProps {
 
 // 包装组件：处理 draft 数据加载和弹窗显示
 function DraftPreviewWrapper() {
-  const { showDraftModal, pendingDraftId, chapterId } = useStudioStore()
+  const { showDraftModal, pendingDraftId, chapterId } = useStudioStore(
+    useShallow(s => ({ showDraftModal: s.showDraftModal, pendingDraftId: s.pendingDraftId, chapterId: s.chapterId }))
+  )
   const [draft, setDraft] = useState<any>(null)
   const [loading, setLoading] = useState(false)
 
@@ -84,7 +87,9 @@ export function StudioShell({ projectId, chapterId }: StudioShellProps) {
     panelSpecs,
     applyWsEvent,
     storyboardJob,
-  } = useStudioStore()
+  } = useStudioStore(
+    useShallow(s => ({ setContext: s.setContext, setScript: s.setScript, setStudioData: s.setStudioData, loadChapterDraft: s.loadChapterDraft, saveChapterDraft: s.saveChapterDraft, selectPanel: s.selectPanel, selectedPanelId: s.selectedPanelId, panelSpecs: s.panelSpecs, applyWsEvent: s.applyWsEvent, storyboardJob: s.storyboardJob }))
+  )
 
   // Initialize context on mount
   useEffect(() => {

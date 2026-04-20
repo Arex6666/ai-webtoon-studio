@@ -491,8 +491,29 @@ async def generate_asset_image(
                     data["embedding_status"] = "ready"
                     data["embedding_source"] = "auto_generation"
                     data["face_embedding"] = result["embedding_path"]  # backwards compat
+                elif result.get("image_url"):
+                    # Fallback: provider didn't extract embedding, try explicit extraction
+                    try:
+                        from app.services.faceid.embedder import embed_character_faceid
+                        faceid_result = await embed_character_faceid(
+                            character_id=asset_id,
+                            reference_image_path=result["image_url"],
+                            project_id=asset.project_id,
+                            provider_name="auto"
+                        )
+                        if faceid_result.get("success"):
+                            data["embedding_path"] = faceid_result["embedding_path"]
+                            data["embedding_status"] = "ready"
+                            data["embedding_source"] = "fallback_extraction"
+                            data["face_embedding"] = faceid_result["embedding_path"]
+                        else:
+                            data["embedding_status"] = "failed"
+                            data["embedding_error"] = faceid_result.get("error", "Fallback extraction failed")
+                    except Exception as fallback_exc:
+                        logger.warning(f"FaceID fallback extraction failed: {fallback_exc}")
+                        data["embedding_status"] = "failed"
+                        data["embedding_error"] = f"Fallback extraction failed: {fallback_exc}"
                 else:
-                    # No face detected in the generated image — don't block image gen
                     data["embedding_status"] = "failed"
                     data["embedding_error"] = "No face detected in generated image"
             except Exception as emb_exc:

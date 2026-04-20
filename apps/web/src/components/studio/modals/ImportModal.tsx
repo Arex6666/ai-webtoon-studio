@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useStudioStore } from '@/lib/store/studioStore'
+import { useShallow } from 'zustand/react/shallow'
 import { useToast } from '@/hooks/use-toast'
 
 interface ImportModalProps {
@@ -15,7 +16,9 @@ interface ImportModalProps {
 export function ImportModal({ open, onOpenChange }: ImportModalProps) {
   const [jsonInput, setJsonInput] = useState('')
   const [error, setError] = useState('')
-  const { importChapterSpec } = useStudioStore()
+  const { importChapterSpec } = useStudioStore(
+    useShallow(s => ({ importChapterSpec: s.importChapterSpec }))
+  )
   const { toast } = useToast()
 
   const handleImport = () => {

@@ -19,6 +19,20 @@ logger = logging.getLogger(__name__)
 
 # ============ Schemas ============
 
+class PanelVideoMeta(BaseModel):
+    """每张图片对应的分镜元数据，用于编译高质量 motion prompt"""
+    camera_move: Optional[str] = None      # "static", "pan", "dolly_in", etc.
+    shot_type: Optional[str] = None        # "CU", "WS", "MS", etc.
+    actions: Optional[str] = None          # 角色动作描述
+    mood: Optional[str] = None             # 情绪氛围
+    weather: Optional[str] = None          # 天气
+    time_of_day: Optional[str] = None      # 时间段
+    composition_notes: Optional[List[str]] = None  # 构图要点
+    visual_prompt: Optional[str] = None    # LLM 生成的视觉描述
+    lens_hint: Optional[str] = None        # 镜头焦距提示
+    duration_sec: Optional[float] = None   # 面板时长（优先级高于全局）
+
+
 class EpisodeVideoRequest(BaseModel):
     """分集视频生成请求"""
     project_id: str
@@ -26,6 +40,7 @@ class EpisodeVideoRequest(BaseModel):
     motion_prompt: str = "缓慢推进，镜头微微摇动，营造氛围感"  # 运动提示词
     duration_sec: float = 5.0            # 默认每段视频时长（当 duration_per_image 未指定时使用）
     duration_per_image: Optional[List[float]] = None  # 每张图片的独立时长（与 image_urls 对应）
+    panel_metadata: Optional[List[PanelVideoMeta]] = None  # 分镜结构化数据（与 image_urls 对应）
     provider: str = "doubao"             # 默认使用豆包
 
 
@@ -87,7 +102,27 @@ async def generate_episode_video(
             else request.duration_sec
         )
 
+        # 提取当前面板的结构化元数据（如果有）
+        panel_meta_dict = None
+        if request.panel_metadata and idx < len(request.panel_metadata):
+            pm = request.panel_metadata[idx]
+            panel_meta_dict = pm.model_dump(exclude_none=True)
+            # 面板自带时长优先
+            if pm.duration_sec is not None:
+                img_duration = pm.duration_sec
+
         # 创建 Job 记录
+        inputs = {
+            "episode_number": episode_num,
+            "image_url": image_url,
+            "image_index": idx,
+            "motion_prompt": request.motion_prompt,
+            "duration_sec": img_duration,
+            "provider": request.provider,
+        }
+        if panel_meta_dict:
+            inputs["panel_metadata"] = panel_meta_dict
+
         job = Job(
             id=job_id,
             type="episode_video",
@@ -99,14 +134,7 @@ async def generate_episode_video(
             max_attempts=3,
             cost_estimated=0.5,
             cost_used=0.0,
-            inputs_json={
-                "episode_number": episode_num,
-                "image_url": image_url,
-                "image_index": idx,
-                "motion_prompt": request.motion_prompt,
-                "duration_sec": img_duration,
-                "provider": request.provider,
-            },
+            inputs_json=inputs,
         )
         db.add(job)
         db.commit()

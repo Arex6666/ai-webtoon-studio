@@ -84,14 +84,14 @@ export function startMockJob(
         if (checkCancelled()) return
 
         // 3. 发送 panel_status Queued
-        emit(createWsEvent('panel_status', { panelId: job.panelId, status: 'Queued' }))
+        emit(createWsEvent('panel_status', { panelId: job.panelId!, status: 'Queued' }))
 
         // 4. 等待一小段时间后开始 Running
         await delay(300)
         if (checkCancelled()) return
 
         emit(createWsEvent('job_status', { jobId: job.id, status: 'Running' }))
-        emit(createWsEvent('panel_status', { panelId: job.panelId, status: 'Running' }))
+        emit(createWsEvent('panel_status', { panelId: job.panelId!, status: 'Running' }))
 
         // 5. 发送进度更新
         for (let i = 1; i <= CONFIG.progressSteps; i++) {
@@ -108,13 +108,13 @@ export function startMockJob(
         if (shouldFail) {
             const errorReason = FAILURE_REASONS[Math.floor(Math.random() * FAILURE_REASONS.length)]
             emit(createWsEvent('job_status', { jobId: job.id, status: 'Failed', error: errorReason }))
-            emit(createWsEvent('panel_status', { panelId: job.panelId, status: 'NeedsFix' }))
+            emit(createWsEvent('panel_status', { panelId: job.panelId!, status: 'NeedsFix' }))
         } else {
             emit(createWsEvent('job_status', { jobId: job.id, status: 'Succeeded' }))
-            emit(createWsEvent('panel_status', { panelId: job.panelId, status: 'Rendered' }))
+            emit(createWsEvent('panel_status', { panelId: job.panelId!, status: 'Rendered' }))
 
             // 生成 ExtendedLayerPack（带正确的 outputs 结构）
-            const layerPack = createExtendedLayerPack(job.panelId, job.id, job.provider)
+            const layerPack = createExtendedLayerPack(job.panelId!, job.id, job.provider)
 
             // 添加 QA 结果到 layerPack
             const qaScore = 0.6 + Math.random() * 0.35
@@ -122,10 +122,10 @@ export function startMockJob(
             const issues = shuffleArray(QA_ISSUES).slice(0, issueCount)
             layerPack.qa = { score: qaScore, issues }
 
-            emit(createWsEvent('layerpack_ready', { panelId: job.panelId, layerPack }))
+            emit(createWsEvent('layerpack_ready', { panelId: job.panelId!, layerPack }))
 
             emit(createWsEvent('qa_result', {
-                panelId: job.panelId,
+                panelId: job.panelId!,
                 jobId: job.id,
                 score: qaScore,
                 issues,
@@ -161,13 +161,13 @@ export function startMockFixJob(
         await delay(FIX_CONFIG.startDelay)
         if (checkCancelled()) return
 
-        emit(createWsEvent('panel_status', { panelId: job.panelId, status: 'Queued' }))
+        emit(createWsEvent('panel_status', { panelId: job.panelId!, status: 'Queued' }))
 
         await delay(200)
         if (checkCancelled()) return
 
         emit(createWsEvent('job_status', { jobId: job.id, status: 'Running' }))
-        emit(createWsEvent('panel_status', { panelId: job.panelId, status: 'Running' }))
+        emit(createWsEvent('panel_status', { panelId: job.panelId!, status: 'Running' }))
 
         for (let i = 1; i <= FIX_CONFIG.progressSteps; i++) {
             await delay(FIX_CONFIG.progressInterval)
@@ -182,13 +182,13 @@ export function startMockFixJob(
         if (shouldFail) {
             const errorReason = 'Fix operation failed: ' + FAILURE_REASONS[Math.floor(Math.random() * FAILURE_REASONS.length)]
             emit(createWsEvent('job_status', { jobId: job.id, status: 'Failed', error: errorReason }))
-            emit(createWsEvent('panel_status', { panelId: job.panelId, status: 'NeedsFix' }))
+            emit(createWsEvent('panel_status', { panelId: job.panelId!, status: 'NeedsFix' }))
         } else {
             emit(createWsEvent('job_status', { jobId: job.id, status: 'Succeeded' }))
-            emit(createWsEvent('panel_status', { panelId: job.panelId, status: 'Rendered' }))
+            emit(createWsEvent('panel_status', { panelId: job.panelId!, status: 'Rendered' }))
 
             // 根据 strategy 生成不同的 LayerPack
-            const layerPack = createExtendedLayerPack(job.panelId, job.id, job.provider)
+            const layerPack = createExtendedLayerPack(job.panelId!, job.id, job.provider)
 
             // 修复任务的 QA 分数更高，issues 更少
             const qaScore = 0.75 + Math.random() * 0.2 // 0.75 ~ 0.95
@@ -196,10 +196,10 @@ export function startMockFixJob(
             const issues = shuffleArray(QA_ISSUES).slice(0, issueCount)
             layerPack.qa = { score: qaScore, issues }
 
-            emit(createWsEvent('layerpack_ready', { panelId: job.panelId, layerPack }))
+            emit(createWsEvent('layerpack_ready', { panelId: job.panelId!, layerPack }))
 
             emit(createWsEvent('qa_result', {
-                panelId: job.panelId,
+                panelId: job.panelId!,
                 jobId: job.id,
                 score: qaScore,
                 issues,

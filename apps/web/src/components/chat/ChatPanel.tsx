@@ -7,6 +7,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { useChatStore } from '@/lib/store/chatStore';
+import { useShallow } from 'zustand/react/shallow';
 import { ChatMessage } from './ChatMessage';
 import { ActionCard } from './ActionCard';
 import { MessageInput } from './MessageInput';
@@ -36,7 +37,18 @@ export function ChatPanel({
     connect,
     disconnect,
     sendMessage,
-  } = useChatStore();
+  } = useChatStore(
+    useShallow(s => ({
+      messages: s.messages,
+      pendingActions: s.pendingActions,
+      isConnected: s.isConnected,
+      isStreaming: s.isStreaming,
+      error: s.error,
+      connect: s.connect,
+      disconnect: s.disconnect,
+      sendMessage: s.sendMessage,
+    }))
+  );
 
   // Connect on mount
   useEffect(() => {

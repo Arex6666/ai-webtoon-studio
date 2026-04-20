@@ -1,0 +1,352 @@
+# Backend File Map
+
+## Notes
+- Scope: backend source files, migrations, scripts, tests, and key workflow/template assets under `apps/api`.
+- Excluded: `venv/`, `__pycache__/`, `.pytest_cache/`, `.env`, local database files, and generated debug artifacts such as `*.txt` and `*.json` outputs.
+- Format: each line lists a repository path followed by a short description of that file's responsibility.
+
+## apps/api Root Files
+- `add_version_columns.py`: One-off migration helper that adds version-tracking columns to storyboard_drafts.
+- `alembic.ini`: Alembic configuration file that defines migration script paths and logging.
+- `check.py`: Temporary debug script that reads and prints part of the panel model file.
+- `check_config.py`: Quick script that prints loaded backend configuration values.
+- `check_db.py`: Quick SQLite inspection script that prints table names and row counts.
+- `fix_panel.py`: One-off repair script that rewrites the panel model source file.
+- `get_character_asset.py`: Utility script that finds character assets and writes the first asset id to a file.
+- `requirements.txt`: Backend dependency list for FastAPI, SQLAlchemy, Celery, image processing, storage, and tests.
+- `test_comfyui_connection.py`: Manual connectivity test script for ComfyUI.
+- `test_doubao_api.py`: Manual API test script for Doubao Seedream image generation.
+- `test_doubao_auth.py`: Manual test script for Doubao authentication and request signing.
+- `test_faceid_extraction.py`: Manual test script for FaceID extraction.
+- `test_network.py`: Manual network test script for Volcengine Ark connectivity.
+- `test_remote_comfyui.py`: Manual connectivity and diagnostics script for a remote ComfyUI instance.
+- `update_chapters.py`: One-off text replacement script that patches field extraction logic in chapters.py.
+- `validate_setup.py`: Environment validation script that checks local services, models, and config before development.
+
+## Runtime Code Under app/
+- `app/__init__.py`: Package initializer for `app` that exposes modules or marks the directory as a Python package.
+- `app/api/__init__.py`: Package initializer for `app/api` that exposes modules or marks the directory as a Python package.
+- `app/api/deps.py`: API Dependencies - Authentication and common utilities.
+- `app/api/routes/__init__.py`: Package initializer for `app/api/routes` that exposes modules or marks the directory as a Python package.
+- `app/api/routes/agent.py`: Agent API - 为前端 Agent（聊天+卡片）提供服务端能力.
+- `app/api/routes/analytics.py`: 统计分析路由 - Analytics API (E4: Real Cost Metering).
+- `app/api/routes/asset_autobuild.py`: Asset Auto-Build API Routes.
+- `app/api/routes/assets/__init__.py`: 资产管理路由.
+- `app/api/routes/assets/characters.py`: Character asset routes.
+- `app/api/routes/assets/consistency.py`: Consistency-related asset routes (FaceID embeddings, scene anchors).
+- `app/api/routes/assets/scenes.py`: Scene asset routes.
+- `app/api/routes/assets.py`: 资产管理路由.
+- `app/api/routes/auth.py`: 认证路由 - JWT + 数据库用户.
+- `app/api/routes/automation.py`: API routes for starting the full automation pipeline and querying job status/results.
+- `app/api/routes/batch_render.py`: API routes for chapter-level batch rendering, render queue creation, and batch progress checks.
+- `app/api/routes/bindings.py`: 资产绑定路由 - Bindings API (数据库版本).
+- `app/api/routes/brain.py`: Brain API - 剧本解析和智能分析路由.
+- `app/api/routes/chapters/__init__.py`: Chapter routes - split into sub-modules.
+- `app/api/routes/chapters/automation.py`: Automation operations for chapters.
+- `app/api/routes/chapters/crud.py`: Basic CRUD operations for chapters.
+- `app/api/routes/chapters/revisions.py`: Revision operations for chapters.
+- `app/api/routes/chapters/script.py`: Script operations for chapters.
+- `app/api/routes/chapters/storyboard.py`: Storyboard operations for chapters.
+- `app/api/routes/chapters/studio.py`: Studio operations for chapters.
+- `app/api/routes/chapters.py`: 章节管理路由.
+- `app/api/routes/compose.py`: 合成导出路由 - 长条漫 Strip PNG 导出.
+- `app/api/routes/conversations.py`: Conversation API Routes.
+- `app/api/routes/drafts.py`: Drafts API Routes (S3-02).
+- `app/api/routes/export_strip.py`: Export API Routes.
+- `app/api/routes/exports.py`: Exports API - 导出管理.
+- `app/api/routes/faceid.py`: FaceID API Routes.
+- `app/api/routes/generate.py`: 高级生成 API 路由.
+- `app/api/routes/health.py`: 健康检查与系统诊断.
+- `app/api/routes/identity.py`: Identity API - 角色一致性管理路由.
+- `app/api/routes/jobs.py`: 统一任务路由 - Jobs API (使用 Celery).
+- `app/api/routes/layerpacks.py`: LayerPack 路由 - 图层包管理 API.
+- `app/api/routes/music.py`: Music 路由 - 音乐资产管理.
+- `app/api/routes/orchestrator.py`: Studio Orchestrator API Routes.
+- `app/api/routes/panels.py`: 分镜管理路由.
+- `app/api/routes/projects.py`: 项目管理路由.
+- `app/api/routes/props.py`: Prop Assets API Routes.
+- `app/api/routes/providers.py`: Provider API Routes - Provider 状态和健康检查.
+- `app/api/routes/qa.py`: QA API - 质量检测路由.
+- `app/api/routes/qa_fix.py`: QA Fix Workflow Routes (E5: NeedsFix Workflow with Guided Repair).
+- `app/api/routes/release.py`: 发布路由 - Release API.
+- `app/api/routes/render.py`: 渲染路由 - 图层生成.
+- `app/api/routes/scene_anchor.py`: Scene Anchor API - 场景一致性管理路由.
+- `app/api/routes/script_pipeline.py`: Script Pipeline API - 剧本流水线 API 路由.
+- `app/api/routes/shot_versions.py`: Shot Versions API - 镜头版本管理.
+- `app/api/routes/studios.py`: Studios API - 工作室管理.
+- `app/api/routes/templates.py`: 模板路由 - Templates API.
+- `app/api/routes/timeline.py`: 时间轴路由 - Timeline API (数据库版本).
+- `app/api/routes/typeset.py`: 排版路由 - Typeset API (完整实现).
+- `app/api/routes/versions.py`: Versions API - 版本管理路由 (E3: Persistent Version Tree).
+- `app/api/routes/voices.py`: Voice Agent 路由 - AI 配音智能体管理.
+- `app/api/routes/ws.py`: WebSocket 路由 - 实时任务状态推送和对话.
+- `app/celery_app.py`: Celery 应用配置.
+- `app/core/__init__.py`: Package initializer for `app/core` that exposes modules or marks the directory as a Python package.
+- `app/core/config.py`: 应用配置 - 使用 Pydantic Settings 管理环境变量.
+- `app/core/database.py`: 数据库连接配置.
+- `app/core/production_specs.py`: 生产规格常量定义.
+- `app/core/storage.py`: MinIO 对象存储客户端.
+- `app/db/__init__.py`: Package initializer for `app/db` that exposes modules or marks the directory as a Python package.
+- `app/db/database.py`: Compatibility re-export module for database helpers used by older imports.
+- `app/main.py`: AI Webtoon Studio - FastAPI 主入口.
+- `app/models/__init__.py`: Package initializer for `app/models` that exposes modules or marks the directory as a Python package.
+- `app/models/artifact.py`: Artifact Model - 渲染产物.
+- `app/models/asset.py`: Asset Model - 资产（角色、场景、气泡样式、风格配置）.
+- `app/models/asset_relation.py`: AssetRelation Model - 资产关系图谱.
+- `app/models/asset_version.py`: AssetVersion Model - 资产版本.
+- `app/models/base.py`: SQLAlchemy Base Model.
+- `app/models/bindings.py`: Bindings Model - 章节资产绑定.
+- `app/models/chapter.py`: Chapter Model - 章节.
+- `app/models/character_canonical.py`: CharacterCanonical Model - 角色基准资产（定妆照候选/选中）.
+- `app/models/conversation.py`: Conversation Model - 对话会话模型.
+- `app/models/conversation_action.py`: ConversationAction Model - 对话触发的动作模型.
+- `app/models/conversation_message.py`: ConversationMessage Model - 对话消息模型.
+- `app/models/cost_config.py`: ProviderCostConfig Model - 提供商成本配置 (E4: Cost Metering).
+- `app/models/export.py`: Export Model - 导出记录.
+- `app/models/export_job.py`: ExportJob Model - 导出任务.
+- `app/models/face_embedding.py`: FaceEmbedding Model - 人脸嵌入.
+- `app/models/fix_plan.py`: FixPlan Model - 修复计划.
+- `app/models/job.py`: Job Model - 统一任务模型.
+- `app/models/layer_pack.py`: LayerPack Model - 图层包.
+- `app/models/outfit_variant.py`: OutfitVariant Model - 服装变体（作为角色的子资源）.
+- `app/models/panel.py`: Panel Model - 分镜/镜头.
+- `app/models/patch_record.py`: PatchRecord Model - 变更记录 (E3: Persistent Version Tree).
+- `app/models/project.py`: Project Model - 项目.
+- `app/models/prop_asset.py`: PropAsset Model - 物品资产（手持物品、场景陈设）.
+- `app/models/qa_report.py`: QAReport Model - QA报告.
+- `app/models/render_attempt.py`: RenderAttempt Model - 渲染尝试记录.
+- `app/models/render_job.py`: RenderJob Model - 渲染任务.
+- `app/models/revision.py`: Revision Model - 版本记录.
+- `app/models/scene_anchor.py`: SceneAnchor Model - 场景锚点.
+- `app/models/shot_version.py`: ShotVersion Model - 镜头版本.
+- `app/models/snapshot.py`: Snapshot Model - 版本快照 (E3: Persistent Version Tree).
+- `app/models/storyboard_draft.py`: Storyboard Draft Model (S3-02).
+- `app/models/studio.py`: Studio Model - 工作室/租户.
+- `app/models/template.py`: Template Model - 模板/风格包.
+- `app/models/timeline.py`: Timeline Model - 时间轴.
+- `app/models/user.py`: User Model - 用户/认证.
+- `app/models/voice_asset.py`: Voice Asset Models - 声音资产（配音智能体、音乐）.
+- `app/schemas/__init__.py`: Package initializer for `app/schemas` that exposes modules or marks the directory as a Python package.
+- `app/schemas/assets_lock.py`: Assets Lock Schema (S3-03).
+- `app/schemas/automation.py`: Automation Schemas - 自动化流程数据模型.
+- `app/schemas/brain/__init__.py`: Package initializer for `app/schemas/brain` that exposes modules or marks the directory as a Python package.
+- `app/schemas/brain/enums.py`: Brain Enums - 统一枚举源.
+- `app/schemas/brain/script_analysis.py`: ScriptAnalysisV1 - 剧情结构化注册表.
+- `app/schemas/brain/storyboard_draft_v2.py`: StoryboardDraftV2 - 面板级结构化输出.
+- `app/schemas/bundle_manifest.py`: Bundle Manifest Schema - 章节打包清单规格 v1.
+- `app/schemas/chapter_layout.py`: ChapterLayout JSON Schema - 章节布局定义.
+- `app/schemas/character_canonical.py`: Character Canonical Schema - 角色 Canonical 相关的 Pydantic 模型.
+- `app/schemas/common.py`: Common schemas - 通用响应模型.
+- `app/schemas/conversation.py`: Conversation Schemas - 对话相关的 Pydantic 模型.
+- `app/schemas/director_profile.py`: DirectorProfile - 导演风格约束.
+- `app/schemas/layer_pack_meta.py`: LayerPackMeta JSON Schema - 图层包元数据定义.
+- `app/schemas/layerpack_manifest.py`: LayerPack Manifest Schema - 图层包清单规格 v1.
+- `app/schemas/panel_spec.py`: PanelSpec JSON Schema - 分镜规格定义.
+- `app/schemas/props.py`: Prop Asset Schemas.
+- `app/schemas/script_ir.py`: Script IR - 剧本结构化中间表示.
+- `app/schemas/shot_spec.py`: ShotSpec Schema - 镜头规格（对齐设计文档）.
+- `app/schemas/story_artifacts.py`: Story Artifacts - 故事生成中间产物的 Pydantic 模型.
+- `app/scripts/fix_db_columns.py`: 数据库迁移脚本：添加 S3-04 ~ S3-06 的新字段.
+- `app/services/__init__.py`: Package initializer for `app/services` that exposes modules or marks the directory as a Python package.
+- `app/services/agents/__init__.py`: Agents Package - 专业智能体.
+- `app/services/agents/asset_agent.py`: AssetAgent - 资产智能体.
+- `app/services/agents/base_agent.py`: Base Agent - 基础智能体类.
+- `app/services/agents/director_agent.py`: DirectorAgent - 导演智能体.
+- `app/services/agents/patch_generator.py`: PatchGenerator - 补丁生成器模块.
+- `app/services/agents/qa_agent.py`: QAAgent - 质量分析智能体.
+- `app/services/agents/rendering_agent.py`: RenderingAgent - 渲染智能体.
+- `app/services/agents/schema_guard.py`: SchemaGuard - Schema校验+自修复模块.
+- `app/services/agents/script_agent.py`: ScriptAgent - 剧本智能体.
+- `app/services/agents/story_agent.py`: StoryAgent - 故事创作智能体.
+- `app/services/asset_hub/__init__.py`: Asset Hub - 资产中台模块.
+- `app/services/asset_hub/asset_generator.py`: AssetGenerator - 资产生成器.
+- `app/services/asset_hub/asset_matcher.py`: AssetMatcher - 智能资产匹配器.
+- `app/services/asset_hub/lock_gate.py`: AssetLockGate - 资产门禁确认模块.
+- `app/services/asset_image_generator.py`: Asset Image Generator - 资产参考图自动生成.
+- `app/services/asset_name_extractor.py`: Asset name extraction helpers.
+- `app/services/asset_pipeline.py`: Asset Pipeline Orchestrator - 资产生成流水线编排器.
+- `app/services/asset_resolver.py`: Asset Resolver Service (S3-03).
+- `app/services/auto_storyboard_orchestrator.py`: AutoStoryboardOrchestrator - 全自动分镜编排器.
+- `app/services/brain/__init__.py`: Package initializer for `app/services/brain` that exposes modules or marks the directory as a Python package.
+- `app/services/brain/asset_matcher.py`: Asset Matcher - 资产智能匹配服务.
+- `app/services/brain/base.py`: Brain Service Base - LLM 服务基类.
+- `app/services/brain/digests.py`: Digests - 输入上下文的 Hash 工具.
+- `app/services/brain/draft_qa_scorer.py`: Draft QA Scorer - 分镜草稿质量评估.
+- `app/services/brain/mock.py`: Mock Brain service implementation used for development or fallback behavior.
+- `app/services/brain/name_resolver.py`: Name Resolver - 角色名称解析与合并服务.
+- `app/services/brain/panel_attribute_filler.py`: Panel Attribute Filler - 分镜属性智能填充服务.
+- `app/services/brain/prompt_composer.py`: PromptComposer - 提示词拼装器.
+- `app/services/brain/prompt_contract.py`: Prompt Contract - 统一的提示词合约数据结构.
+- `app/services/brain/prompt_templates/pc_v1/developer_analysis.md`: Developer prompt template for the script analysis stage.
+- `app/services/brain/prompt_templates/pc_v1/developer_storyboard.md`: Developer prompt template for storyboard generation.
+- `app/services/brain/prompt_templates/pc_v1/system.md`: System prompt template used by the Brain service.
+- `app/services/brain/prompt_templates/pc_v1/user.md`: User prompt template used by the Brain service.
+- `app/services/brain/repair/__init__.py`: Package initializer for `app/services/brain/repair` that exposes modules or marks the directory as a Python package.
+- `app/services/brain/repair/repair_loop.py`: Repair Loop - 自动修复循环.
+- `app/services/brain/repair/repair_prompt.py`: Repair Prompt - 只修 JSON，不重写剧情.
+- `app/services/brain/repair/repair_types.py`: Repair Types - 错误模型与分类.
+- `app/services/brain/repair/validator.py`: Validator - 脚本分析 & 分镜校验器.
+- `app/services/brain/scene_matcher.py`: SceneMatcher - 场景智能匹配服务.
+- `app/services/brain/scene_resolver.py`: Scene Resolver - 场景去重与变体管理服务.
+- `app/services/brain/standard_llm.py`: Standard LLM Service - 支持 OpenAI 兼容接口的模型服务 (OpenAI, Deepseek, Tongyi, Doubao).
+- `app/services/brain/storyboard_generator.py`: Storyboard Generator - 两段式 LLM 生成器.
+- `app/services/canonical/__init__.py`: Package initializer for `app/services/canonical` that exposes modules or marks the directory as a Python package.
+- `app/services/canonical/canonical_generator.py`: Canonical Generator - 角色基准资产自动生成.
+- `app/services/canonical/selector.py`: Candidate Selector - 候选定妆照评分与选优.
+- `app/services/composer/__init__.py`: Package initializer for `app/services/composer` that exposes modules or marks the directory as a Python package.
+- `app/services/composer/strip_composer.py`: Strip Composer - 长条漫合成.
+- `app/services/conversation/__init__.py`: Conversation Services - 对话相关服务.
+- `app/services/conversation/agent_orchestrator.py`: AgentOrchestrator - 智能体编排器.
+- `app/services/conversation/conversation_service.py`: ConversationService - 对话服务.
+- `app/services/conversation/intent_router.py`: IntentRouter - 意图路由器.
+- `app/services/conversation/tool_handlers.py`: ToolHandlers - 工具处理函数.
+- `app/services/conversation/tool_registry.py`: ToolRegistry - 工具注册表.
+- `app/services/cost/__init__.py`: Package initializer for `app/services/cost` that exposes modules or marks the directory as a Python package.
+- `app/services/cost/cost_service.py`: CostService - 成本计算服务 (E4: Real Cost Metering).
+- `app/services/doubao_asset_generator.py`: Doubao Asset Generator - 使用豆包 Seedream 生成资产参考图.
+- `app/services/doubao_audio/__init__.py`: Doubao Audio Module - 豆包音频服务.
+- `app/services/doubao_audio/lip_sync_provider.py`: Doubao Lip Sync Provider - 豆包对口型.
+- `app/services/doubao_audio/pipeline.py`: Doubao Audio/Video Pipeline - 豆包音视频完整Pipeline.
+- `app/services/doubao_audio/subtitle_provider.py`: Doubao Subtitle Provider - 豆包字幕生成.
+- `app/services/doubao_audio/tts_provider.py`: Doubao TTS Provider - 豆包语音合成.
+- `app/services/draft_qa.py`: Draft QA Service (S3-05).
+- `app/services/export/__init__.py`: Package initializer for `app/services/export` that exposes modules or marks the directory as a Python package.
+- `app/services/export/asset_lock_resolver.py`: Asset Lock Resolver - 资产锁定解析器.
+- `app/services/export/bundle_builder.py`: Bundle Builder - 章节打包核心流水线.
+- `app/services/export/bundle_errors.py`: Bundle Errors - 导出错误类型.
+- `app/services/export/bundle_models.py`: Bundle Models - 内部数据结构.
+- `app/services/export/export_gate.py`: Export Gate - 导出门禁.
+- `app/services/export/provenance_collector.py`: Provenance Collector - 来源追溯收集器.
+- `app/services/export/release_bundle.py`: Release Bundle 生成器.
+- `app/services/export/strip_composer.py`: Strip composer - stitch panel images into a vertical strip.
+- `app/services/faceid/embedder.py`: FaceID Embedder Service.
+- `app/services/faceid/provider.py`: FaceID Provider Abstraction.
+- `app/services/graph/__init__.py`: Graph Services - Project Graph模块.
+- `app/services/graph/dependency_graph.py`: DependencyGraph - 依赖图+失效规则.
+- `app/services/graph/graph_store.py`: GraphStore - Project Graph存储层.
+- `app/services/graph/version_manager.py`: VersionManager - 版本管理器 (E3: Persistent Version Tree).
+- `app/services/identity/__init__.py`: Identity Service - 角色一致性管理.
+- `app/services/identity/embedding_storage.py`: Embedding 存储服务.
+- `app/services/identity/face_extractor.py`: FaceID Embedding 提取服务.
+- `app/services/layer_factory/__init__.py`: Package initializer for `app/services/layer_factory` that exposes modules or marks the directory as a Python package.
+- `app/services/layer_factory/advanced_adapter.py`: 高级 ComfyUI 生成适配器.
+- `app/services/layer_factory/comfyui_adapter.py`: ComfyUI 生成适配器.
+- `app/services/layer_factory/comfyui_client.py`: ComfyUI Client - 与 ComfyUI 服务通信.
+- `app/services/layer_factory/doubao_image_provider.py`: Doubao Image Provider - 豆包 Seedream 4.5 图片生成.
+- `app/services/layer_factory/mock_comfyui.py`: Mock ComfyUI Client - 开发测试用.
+- `app/services/layer_factory/panel_renderer.py`: Panel Renderer Service - 分镜渲染服务.
+- `app/services/layer_factory/payload_builder.py`: Payload Builder - 构建 ComfyUI 工作流 JSON.
+- `app/services/layer_factory/prompt_compiler.py`: PromptCompiler - 提示词编译器.
+- `app/services/layer_factory/render_planner.py`: RenderPlanner - 渲染计划生成器.
+- `app/services/layer_factory/render_protocol.py`: Render Protocol - 统一渲染协议层.
+- `app/services/layer_factory/tier_config.py`: Tier Configuration - 渲染质量层级预设.
+- `app/services/layer_factory/tongyi_image_provider.py`: Tongyi Wanxiang Image Provider - 通义万相图片生成.
+- `app/services/layer_factory/workflow_builder.py`: ComfyUI Workflow 模板管理与参数注入.
+- `app/services/layer_factory/workflows/depth_estimation.json`: Workflow template for depth-map estimation.
+- `app/services/layer_factory/workflows/flux_basic.json`: Workflow template for basic Flux rendering.
+- `app/services/layer_factory/workflows/flux_controlnet.json`: Workflow template for ControlNet-guided rendering.
+- `app/services/layer_factory/workflows/flux_inpaint.json`: Workflow template for inpainting.
+- `app/services/layer_factory/workflows/flux_ipadapter.json`: Workflow template for IPAdapter-based generation.
+- `app/services/layer_factory/workflows/layer_separation.json`: Workflow template for layer separation.
+- `app/services/layer_factory/workflows/pose_estimation.json`: Workflow template for pose estimation.
+- `app/services/music/__init__.py`: Package initializer for `app/services/music` that exposes modules or marks the directory as a Python package.
+- `app/services/music/suno_provider.py`: Suno Music Provider - 通过 ComfyUI 生成音乐.
+- `app/services/orchestrator/__init__.py`: Orchestrator模块.
+- `app/services/orchestrator/studio_orchestrator.py`: StudioOrchestrator - 统一编排器.
+- `app/services/portrait/__init__.py`: Portrait Service - S5-01 角色参考图自动生成.
+- `app/services/portrait/portrait_generator.py`: S5-01 - Portrait Generator.
+- `app/services/portrait/portrait_qa.py`: S5-01 - Portrait QA (Face Quality Assurance).
+- `app/services/portrait/prompt_composer.py`: S5-01 - Portrait Prompt Composer.
+- `app/services/portrait/retry_strategy.py`: S5-01 - Portrait Retry Strategy.
+- `app/services/portrait/spec_generator.py`: S5-01 - CharacterPortraitSpec Generator.
+- `app/services/prop_extractor.py`: Prop Extractor Service - 物品/服装自动提取与创建服务.
+- `app/services/qa/__init__.py`: QA Service - 质量检测和自动修复.
+- `app/services/qa/auto_retry.py`: 自动重试管理器.
+- `app/services/qa/drift_detector.py`: 脸漂移检测服务.
+- `app/services/qa/fix_plan_generator.py`: Fix Plan Generator - 修复方案生成器 (E5: NeedsFix Workflow).
+- `app/services/qa/image_qa.py`: QA 检测服务 - 图像质量自动检测.
+- `app/services/scene/__init__.py`: S5-SC: Scene Services.
+- `app/services/scene/anchor_generator.py`: S5-SC: Scene Anchor Generator.
+- `app/services/scene/control_map_extractor.py`: S5-SC: Control Map Extractor.
+- `app/services/scene/retry_strategy.py`: S5-SC: Scene Anchor Retry Strategy.
+- `app/services/scene_anchor/__init__.py`: Scene Anchor Service - 场景一致性管理.
+- `app/services/scene_anchor/anchor_storage.py`: 场景锚点存储服务.
+- `app/services/scene_anchor/control_map_generator.py`: 控制图生成器.
+- `app/services/script_pipeline.py`: Script Pipeline - 3 阶段 LLM 流水线.
+- `app/services/storage/__init__.py`: Storage Services.
+- `app/services/storage/object_store.py`: Object Store - MinIO/S3 统一存储工具.
+- `app/services/typesetter/__init__.py`: Package initializer for `app/services/typesetter` that exposes modules or marks the directory as a Python package.
+- `app/services/typesetter/bubble_placer.py`: Bubble Placer - 气泡放置和图像合成.
+- `app/services/typesetter/svg_renderer.py`: SVG Renderer - 气泡 SVG 渲染.
+- `app/services/video/__init__.py`: Video Services Package.
+- `app/services/video/comfyui_video_provider.py`: ComfyUI Video Provider - 基于 ComfyUI 的视频生成.
+- `app/services/video/doubao_video_provider.py`: Doubao Video Provider - 豆包视频生成.
+- `app/services/video/tongyi_video_provider.py`: Tongyi Video Provider - 通义万相视频生成.
+- `app/services/video/video_provider_base.py`: Video Provider Base - 视频生成 Provider 抽象基类.
+- `app/workers/__init__.py`: Package initializer for `app/workers` that exposes modules or marks the directory as a Python package.
+- `app/workers/advanced_worker.py`: 高级生成 Worker.
+- `app/workers/anchor_worker.py`: Anchor 生成 Worker (控制图).
+- `app/workers/bundle_worker.py`: Bundle Worker - 章节打包任务执行者.
+- `app/workers/export_worker.py`: 导出 Worker（完整实现）.
+- `app/workers/image_worker.py`: 图像生成 Worker (使用 ComfyUI).
+- `app/workers/video_worker.py`: 视频生成 Worker - 真实 Provider 实现.
+
+## Resource And Workflow Templates
+- `app/resources/workflows/base_character.json`: Workflow template for base character generation.
+- `app/resources/workflows/flux_base.json`: Base Flux image generation workflow template.
+- `app/resources/workflows/workflow_full_injection.json`: Workflow template that injects full asset context into generation.
+- `app/resources/workflows/workflow_scene_lock.json`: Workflow template for scene-locked generation.
+- `app/resources/workflows/workflow_with_faceid.json`: Workflow template for generation constrained by FaceID consistency.
+
+## Database Migrations
+- `migrations/add_asset_reference_columns.sql`: Manual SQL migration used to add reference-related columns to the assets table.
+- `migrations/env.py`: Alembic Environment Configuration.
+- `migrations/script.py.mako`: Alembic template used when generating new migration files.
+- `migrations/versions/001_initial.py`: Initial migration - create all tables.
+- `migrations/versions/002_tables_part2.py`: Create remaining tables part 2.
+- `migrations/versions/003_add_asset_reference_fields.py`: Add reference image fields to assets table.
+- `migrations/versions/003_render_export.py`: Create render and export tables.
+- `migrations/versions/004_qa_fix.py`: Create QA and fix tables.
+- `migrations/versions/005_export_revision.py`: Create export and revision tables.
+- `migrations/versions/006_timeline_bindings_job.py`: Database Migration: Task A02 - Timeline, Bindings, Job tables.
+- `migrations/versions/007_layerpack_v1.py`: Database Migration: Task A05 - LayerPack 扩展.
+- `migrations/versions/008_add_conversation_models.py`: Database Migration: 添加对话智能体系统模型.
+- `migrations/versions/009_merge_branches.py`: Merge migration branches.
+- `migrations/versions/010_add_users_auth.py`: Add users table for auth.
+- `migrations/versions/011_add_conversation_episode_number.py`: Add episode_number to conversations table.
+- `migrations/versions/012_add_render_tier.py`: E1: Add render tier column to jobs table.
+- `migrations/versions/013_action_approval.py`: E2: Add approval columns to conversation_actions.
+- `migrations/versions/014_snapshots.py`: E3: Create snapshots and patch_records tables.
+- `migrations/versions/015_cost_config.py`: E4: Create provider_cost_configs table.
+- `migrations/versions/016_enhance_qa.py`: E5: Enhance qa_reports and fix_plans tables.
+- `migrations/versions/017_voice_assets.py`: Voice Assets - Add voice_agents and music_assets tables.
+- `migrations/versions/b9a98c1685f5_sync_face_embeddings_columns.py`: sync_face_embeddings_columns.
+
+## Maintenance Scripts
+- `scripts/cleanup_scene_assets.py`: Cleanup duplicate/verbose scene assets and normalize chapter assets_lock scenes.
+- `scripts/clear_project_assets.py`: 清空项目资产的脚本.
+
+## Tests
+- `tests/__init__.py`: Package initializer for `tests` that exposes modules or marks the directory as a Python package.
+- `tests/conftest.py`: Test configuration and fixtures - simplified version.
+- `tests/test_auth.py`: Authentication API tests.
+- `tests/unit/__init__.py`: Package initializer for `tests/unit` that exposes modules or marks the directory as a Python package.
+- `tests/unit/agents/__init__.py`: Package initializer for `tests/unit/agents` that exposes modules or marks the directory as a Python package.
+- `tests/unit/agents/test_agent_route_helpers.py`: agent.py route helpers unit tests.
+- `tests/unit/agents/test_director_agent.py`: DirectorAgent 单元测试.
+- `tests/unit/agents/test_patch_generator.py`: PatchGenerator 单元测试.
+- `tests/unit/agents/test_schema_guard.py`: SchemaGuard 单元测试.
+- `tests/unit/asset_hub/__init__.py`: Asset Hub单元测试.
+- `tests/unit/asset_hub/test_asset_generator.py`: AssetGenerator 单元测试.
+- `tests/unit/asset_hub/test_asset_matcher.py`: AssetMatcher 单元测试.
+- `tests/unit/asset_hub/test_lock_gate.py`: AssetLockGate 单元测试.
+- `tests/unit/brain/test_asset_name_extractor.py`: 资产名称提取与清洗单元测试.
+- `tests/unit/graph/__init__.py`: Graph模块单元测试.
+- `tests/unit/graph/test_dependency_graph.py`: DependencyGraph 单元测试.
+- `tests/unit/graph/test_graph_store.py`: GraphStore 单元测试.
+- `tests/unit/graph/test_version_manager.py`: VersionManager 单元测试.
+- `tests/unit/layer_factory/__init__.py`: Layer Factory单元测试.
+- `tests/unit/layer_factory/test_prompt_compiler.py`: PromptCompiler 单元测试.
+- `tests/unit/layer_factory/test_render_planner.py`: RenderPlanner 单元测试.
+- `tests/unit/orchestrator/__init__.py`: Orchestrator单元测试.
+- `tests/unit/orchestrator/test_studio_orchestrator.py`: StudioOrchestrator 单元测试.

@@ -1,23 +1,80 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useStudioStore } from '@/lib/store/studioStore'
 import { useShallow } from 'zustand/react/shallow'
 import { useToast } from '@/hooks/use-toast'
-import { chaptersApi, renderApi } from '@/lib/api/services'
+import { chaptersApi } from '@/lib/api/services'
+import { useJobTracker } from '@/hooks/useJobTracker'
 import { RenderProvider } from '@/lib/schema/job'
 
 export function useStoryboardGeneration() {
     const {
         chapterId,
         script,
-        setPanelList,
         selectPanel,
     } = useStudioStore(
-    useShallow(s => ({ chapterId: s.chapterId, script: s.script, setPanelList: s.setPanelList, selectPanel: s.selectPanel }))
+    useShallow(s => ({ chapterId: s.chapterId, script: s.script, selectPanel: s.selectPanel }))
   )
     const { toast } = useToast()
     const [isGenerating, setIsGenerating] = useState(false)
+    const [currentJobId, setCurrentJobId] = useState<string | null>(null)
+    const hasHandledRef = useRef<string | null>(null)
 
-    const generateStoryboard = useCallback(async (provider: RenderProvider = 'mock') => {
+    const jobState = useJobTracker(currentJobId)
+
+    // React to job completion/failure via useJobTracker
+    useEffect(() => {
+        if (!currentJobId || !jobState.isComplete) return
+        // Prevent double-handling
+        if (hasHandledRef.current === currentJobId) return
+        hasHandledRef.current = currentJobId
+
+        if (jobState.status === 'succeeded') {
+            // Refresh studio data
+            if (chapterId) {
+                chaptersApi.getStudio(chapterId).then(studioData => {
+                    useStudioStore.getState().setStudioData(studioData)
+
+                    const pendingDraftId = (studioData.chapter?.layout_json as any)?.pending_draft_id
+
+                    if (pendingDraftId) {
+                        useStudioStore.setState({
+                            pendingDraftId: pendingDraftId,
+                            showDraftModal: true
+                        })
+                        toast({
+                            title: "分镜草稿已生成",
+                            description: "请在弹窗中预览并确认应用",
+                        })
+                    } else {
+                        const panels = studioData.panels || []
+                        if (panels.length > 0) {
+                            selectPanel(panels[0].id)
+                        }
+                        toast({
+                            title: "分镜生成完成",
+                            description: `成功生成 ${panels.length} 个分镜`,
+                        })
+                    }
+                }).catch(() => {
+                    toast({
+                        title: "数据刷新失败",
+                        description: "分镜已生成但刷新失败，请手动刷新",
+                        variant: "destructive",
+                    })
+                })
+            }
+            setIsGenerating(false)
+        } else if (jobState.status === 'failed') {
+            toast({
+                title: "分镜失败",
+                description: jobState.error || "生成过程出错，请重试",
+                variant: "destructive",
+            })
+            setIsGenerating(false)
+        }
+    }, [currentJobId, jobState.isComplete, jobState.status, jobState.error, chapterId, selectPanel, toast])
+
+    const generateStoryboard = useCallback(async (provider: RenderProvider = 'deepseek') => {
         if (!chapterId) return
         if (!script.trim()) {
             toast({
@@ -29,82 +86,17 @@ export function useStoryboardGeneration() {
         }
 
         setIsGenerating(true)
+        hasHandledRef.current = null
         toast({
             title: "AI 分镜中...",
             description: "正在解析剧本并生成分镜，请稍候",
         })
 
         try {
-            // 调用统一 jobApi 创建分镜任务
             const jobId = await useStudioStore.getState().createJob('storyboard', chapterId, provider, {
                 script: script,
             })
-
-            // 轮询 job 状态
-            const pollJobStatus = async (): Promise<void> => {
-                try {
-                    const job = await renderApi.getJobStatus(jobId)
-
-                    if (job.status === 'succeeded') {
-                        // 刷新 studio 数据
-                        const studioData = await chaptersApi.getStudio(chapterId)
-                        useStudioStore.getState().setStudioData(studioData)
-
-                        // S3-02: 检查是否有待审核的 draft
-                        const pendingDraftId = studioData.chapter?.layout_json?.pending_draft_id
-
-                        if (pendingDraftId) {
-                            // 有 draft，打开预览弹窗让用户审核
-                            useStudioStore.setState({
-                                pendingDraftId: pendingDraftId,
-                                showDraftModal: true
-                            })
-
-                            setIsGenerating(false)
-                            toast({
-                                title: "分镜草稿已生成",
-                                description: `请在弹窗中预览并确认应用`,
-                            })
-                        } else {
-                            // 旧逻辑：直接更新 panelList（如果没有 draft 流程）
-                            const panels = studioData.panels || []
-                            if (panels.length > 0) {
-                                selectPanel(panels[0].id)
-                            }
-
-                            setIsGenerating(false)
-                            toast({
-                                title: "分镜生成完成",
-                                description: `成功生成 ${panels.length} 个分镜`,
-                            })
-                        }
-                    } else if (job.status === 'failed') {
-                        setIsGenerating(false)
-                        toast({
-                            title: "分镜失败",
-                            description: job.error || "生成过程出错，请重试",
-                            variant: "destructive",
-                        })
-                    } else {
-                        // 继续轮询
-                        setTimeout(pollJobStatus, 1000)
-                    }
-                } catch (error) {
-                    console.error("Poll failed", error)
-                    // Stop polling on network error? Or retry? 
-                    // For now retry a few times or stop. Let's stop to be safe.
-                    setIsGenerating(false)
-                    toast({
-                        title: "状态查询失败",
-                        description: "无法获取任务状态",
-                        variant: "destructive"
-                    })
-                }
-            }
-
-            // 开始轮询
-            setTimeout(pollJobStatus, 500)
-
+            setCurrentJobId(jobId)
         } catch (error) {
             setIsGenerating(false)
             toast({
@@ -112,11 +104,13 @@ export function useStoryboardGeneration() {
                 description: error instanceof Error ? error.message : "请求失败，请重试",
                 variant: "destructive",
             })
+            setCurrentJobId(null)
         }
-    }, [chapterId, script, toast, selectPanel])
+    }, [chapterId, script, toast])
 
     return {
         isGenerating,
+        currentJobId,
         generateStoryboard
     }
 }

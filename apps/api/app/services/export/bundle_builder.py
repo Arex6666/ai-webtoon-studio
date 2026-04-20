@@ -431,7 +431,6 @@ class BundleBuilder:
                 qa_score=snapshot.qa_score if snapshot else None,
                 needs_fix=snapshot.needs_fix if snapshot else False,
                 selected_layerpack_id=plan.layerpack_id,
-                selected_layerpack_id=plan.layerpack_id,
                 selected_typeset_id=plan.typeset_id,
                 online_preview_url=plan.uploaded_preview_url
             )

@@ -11,6 +11,8 @@ import logging
 from app.core.database import get_db
 from app.services.conversation.agent_orchestrator import AgentOrchestrator
 from app.services.agents import ScriptAgent, AssetAgent, RenderingAgent, QAAgent
+from app.core.config import settings
+import redis.asyncio as aioredis
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +27,42 @@ class ConnectionManager:
         self.active_connections: Dict[str, Set[WebSocket]] = {}
         # 全局连接（订阅所有更新）
         self.global_connections: Set[WebSocket] = set()
+        self._redis_pubsub_task = None
+        self._redis_pool = None
+        
+    async def _start_redis_listener(self):
+        if self._redis_pubsub_task is not None:
+            return
+            
+        try:
+            self._redis_pool = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+            pubsub = self._redis_pool.pubsub()
+            await pubsub.subscribe("ws_events")
+            
+            async def listen():
+                try:
+                    async for message in pubsub.listen():
+                        if message["type"] == "message":
+                            try:
+                                data = json.loads(message["data"])
+                                chapter_id = data.get("chapter_id")
+                                msg = data.get("message")
+                                if chapter_id and msg:
+                                    await self._send_to_chapter_local(chapter_id, msg)
+                            except Exception as e:
+                                logger.error(f"Redis ws_events parse error: {e}")
+                except Exception as e:
+                    logger.error(f"Redis ws_events listener crashed: {e}")
+            
+            self._redis_pubsub_task = asyncio.create_task(listen())
+            logger.info("Started Redis PubSub listener for WebSockets")
+        except Exception as e:
+            logger.error(f"Failed to start Redis PubSub: {e}")
     
     async def connect(self, websocket: WebSocket, chapter_id: Optional[str] = None):
         """建立连接"""
         await websocket.accept()
+        await self._start_redis_listener()
         
         if chapter_id:
             if chapter_id not in self.active_connections:
@@ -49,8 +83,8 @@ class ConnectionManager:
         self.global_connections.discard(websocket)
         logger.info(f"WebSocket disconnected")
     
-    async def send_to_chapter(self, chapter_id: str, message: dict):
-        """向订阅特定章节的客户端发送消息"""
+    async def _send_to_chapter_local(self, chapter_id: str, message: dict):
+        """仅向当前进程内的 WebSocket 客户端真正发送数据"""
         connections = self.active_connections.get(chapter_id, set())
         
         # 同时发送给全局连接
@@ -182,7 +216,8 @@ async def push_job_update(
         "result_urls": result_urls,
         "error": error
     }
-    await manager.send_to_chapter(chapter_id, message)
+    # Uses Redid PubSub bridge below
+    await push_chapter_update(chapter_id, "job_status_update", message)
 
 
 async def push_panel_update(
@@ -200,7 +235,7 @@ async def push_panel_update(
         "preview_url": preview_url,
         "qa_score": qa_score
     }
-    await manager.send_to_chapter(chapter_id, message)
+    await push_chapter_update(chapter_id, "panel_update", message)
 
 
 async def push_chapter_update(
@@ -208,13 +243,21 @@ async def push_chapter_update(
     event_type: str,
     data: dict
 ):
-    """推送章节级别更新"""
+    """推送章节级别更新 (发布到 Redis)"""
     message = {
         "event": event_type,
         "chapter_id": chapter_id,
         **data
     }
-    await manager.send_to_chapter(chapter_id, message)
+    try:
+        redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        await redis_client.publish("ws_events", json.dumps({
+            "chapter_id": chapter_id,
+            "message": message
+        }))
+        await redis_client.aclose()
+    except Exception as e:
+        logger.error(f"Failed to publish to redis: {e}")
 
 
 async def push_unified_job_event(
@@ -245,7 +288,15 @@ async def broadcast_to_chapter(chapter_id: str, event: dict):
         ...
     }
     """
-    await manager.send_to_chapter(chapter_id, event)
+    try:
+        redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        await redis_client.publish("ws_events", json.dumps({
+            "chapter_id": chapter_id,
+            "message": event
+        }))
+        await redis_client.aclose()
+    except Exception as e:
+        logger.error(f"Failed to publish to redis: {e}")
 
 
 # ===== 对话 WebSocket 端点 =====

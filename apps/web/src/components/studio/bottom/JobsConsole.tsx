@@ -1,6 +1,7 @@
 'use client'
 
 import { useStudioStore } from '@/lib/store/studioStore'
+import { useShallow } from 'zustand/react/shallow'
 import { cn } from '@/lib/utils'
 import { RenderJob } from '@/lib/schema/job'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -9,6 +10,17 @@ import { Badge } from '@/components/ui/badge'
 import { RefreshCw, AlertCircle, CheckCircle, Clock, Loader2, Eye, Wand2, FileText, Users, Map } from 'lucide-react'
 import { useState } from 'react'
 import { BundlePreviewModal } from '@/components/studio/modals/BundlePreviewModal'
+
+/** Safely coerce a value that might be an object (e.g. {message: "..."}) to a display string */
+function toDisplayString(val: unknown): string {
+  if (val === null || val === undefined) return ''
+  if (typeof val === 'string') return val
+  if (typeof val === 'object' && val !== null) {
+    if ('message' in val && typeof (val as any).message === 'string') return (val as any).message
+    try { return JSON.stringify(val) } catch { return String(val) }
+  }
+  return String(val)
+}
 
 const STATUS_CONFIG = {
     Queued: { icon: Clock, color: 'bg-yellow-500', label: '排队中' },
@@ -29,7 +41,9 @@ const STORYBOARD_STAGES = {
 
 // 分镜任务进度组件
 function StoryboardJobProgress() {
-    const { storyboardJob } = useStudioStore()
+    const { storyboardJob } = useStudioStore(
+    useShallow(s => ({ storyboardJob: s.storyboardJob }))
+  )
 
     if (!storyboardJob) return null
 
@@ -80,7 +94,7 @@ function StoryboardJobProgress() {
                     <div className="flex justify-between text-xs text-ink-muted">
                         <span className="flex items-center gap-1">
                             <StageIcon className="w-3 h-3" />
-                            {stageConfig.description || storyboardJob.message || '处理中...'}
+                            {stageConfig.description || toDisplayString(storyboardJob.message) || '处理中...'}
                         </span>
                         <span>{storyboardJob.progress.toFixed(0)}%</span>
                     </div>
@@ -127,7 +141,7 @@ function StoryboardJobProgress() {
             {isFailed && (
                 <div className="text-xs text-red-400 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" />
-                    {storyboardJob.message || '生成失败，请重试'}
+                    {toDisplayString(storyboardJob.message) || '生成失败，请重试'}
                 </div>
             )}
         </div>
@@ -135,7 +149,9 @@ function StoryboardJobProgress() {
 }
 
 export function JobsConsole() {
-    const { getJobsForChapter, retryJob, selectPanel, panelList, storyboardJob } = useStudioStore()
+    const { getJobsForChapter, retryJob, selectPanel, panelList, storyboardJob } = useStudioStore(
+    useShallow(s => ({ getJobsForChapter: s.getJobsForChapter, retryJob: s.retryJob, selectPanel: s.selectPanel, panelList: s.panelList, storyboardJob: s.storyboardJob }))
+  )
 
     const jobs = getJobsForChapter()
     const [previewExportId, setPreviewExportId] = useState<string | null>(null)
@@ -261,7 +277,7 @@ function JobItem({
                     {(isRunning || job.status === 'Queued') && (
                         <div className="space-y-1">
                             <div className="flex justify-between text-xs text-ink-muted">
-                                <span>{job.message || 'Processing...'}</span>
+                                <span>{toDisplayString(job.message) || 'Processing...'}</span>
                                 <span>{(job.progress * 100).toFixed(0)}%</span>
                             </div>
                             <div className="h-1.5 bg-panel rounded-full overflow-hidden">
@@ -306,7 +322,7 @@ function JobItem({
                     {isFailed && (
                         <div className="text-xs text-red-400 flex items-center gap-1">
                             <AlertCircle className="w-3 h-3" />
-                            {job.error || 'Export failed'}
+                            {toDisplayString(job.error) || 'Export failed'}
                         </div>
                     )}
                 </div>
@@ -359,7 +375,7 @@ function JobItem({
             {isFailed && job.error && (
                 <div className="text-xs text-red-400 mb-2 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" />
-                    {job.error}
+                    {toDisplayString(job.error)}
                 </div>
             )}
 

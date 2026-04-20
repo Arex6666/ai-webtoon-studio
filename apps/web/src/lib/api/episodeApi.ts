@@ -35,6 +35,8 @@ export interface PanelData {
     voice_character: string
     dialogue: string
     duration_sec: number
+    time_of_day?: string    // day/night/dawn/dusk
+    weather?: string        // clear/rain/snow/cloudy
     image_url?: string | null
 }
 

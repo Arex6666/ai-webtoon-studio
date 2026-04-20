@@ -41,13 +41,13 @@ const PROVIDERS: { value: RenderProvider; label: string; icon: React.ReactNode }
   { value: 'keling', label: 'Keling 可灵', icon: <Sparkles className="w-4 h-4" /> },
   { value: 'tongyi', label: '通义万相', icon: <Sparkles className="w-4 h-4" /> },
   { value: 'doubao', label: '豆包', icon: <Sparkles className="w-4 h-4" /> },
+  { value: 'deepseek', label: 'DeepSeek', icon: <Sparkles className="w-4 h-4" /> },
 ]
 
 export function StudioTopbar({ projectId, chapterId, projectName, chapterTitle }: StudioTopbarProps) {
   const {
     saveChapterDraft,
     exportChapterSpec,
-    enqueueRender,
     selectedPanelId,
     panelList,
     script,
@@ -56,11 +56,11 @@ export function StudioTopbar({ projectId, chapterId, projectName, chapterTitle }
     canRender,
     pendingAssetsCount,
   } = useStudioStore(
-    useShallow(s => ({ saveChapterDraft: s.saveChapterDraft, exportChapterSpec: s.exportChapterSpec, enqueueRender: s.enqueueRender, selectedPanelId: s.selectedPanelId, panelList: s.panelList, script: s.script, setPanelList: s.setPanelList, selectPanel: s.selectPanel, canRender: s.canRender, pendingAssetsCount: s.pendingAssetsCount }))
+    useShallow(s => ({ saveChapterDraft: s.saveChapterDraft, exportChapterSpec: s.exportChapterSpec, selectedPanelId: s.selectedPanelId, panelList: s.panelList, script: s.script, setPanelList: s.setPanelList, selectPanel: s.selectPanel, canRender: s.canRender, pendingAssetsCount: s.pendingAssetsCount }))
   )
   const { toast } = useToast()
   const [showImportModal, setShowImportModal] = useState(false)
-  const [selectedProvider, setSelectedProvider] = useState<RenderProvider>('mock')
+  const [selectedProvider, setSelectedProvider] = useState<RenderProvider>('deepseek')
   const [batchVideoRunning, setBatchVideoRunning] = useState(false)
   // const [isGenerating, setIsGenerating] = useState(false) // Moved to hook
 
@@ -189,14 +189,20 @@ export function StudioTopbar({ projectId, chapterId, projectName, chapterTitle }
         const batch = rendered.slice(i, i + CONCURRENCY)
         await Promise.allSettled(
           batch.map(async (panel) => {
-            // Use panel.id as clip target — the backend video worker
-            // will resolve the start frame from the panel's preview
-            const clipId = panel.id
-            return createJob('video', clipId, 'doubao', {
+            return createJob('video', panel.id, 'doubao', {
               start_frame_url: panel.previewUrl || '',
               motion_prompt: panel.description || '',
+              negative_prompt: '',
+              motion_mode: 'single_keyframe',
               duration_sec: 3,
               fps: 24,
+              width: 1080,
+              height: 1920,
+              resolution: '1080x1920',
+              motion_strength: 0.5,
+              prompt_extend: true,
+              model: 'jimeng-video-v1',
+              source: 'studio_topbar_batch',
             })
           })
         )
@@ -216,7 +222,7 @@ export function StudioTopbar({ projectId, chapterId, projectName, chapterTitle }
     await generateStoryboard(selectedProvider)
   }
 
-  const handleRenderCurrent = () => {
+  const handleRenderCurrent = async () => {
     if (!selectedPanelId) {
       toast({
         title: "请先选择分镜",
@@ -226,14 +232,19 @@ export function StudioTopbar({ projectId, chapterId, projectName, chapterTitle }
       return
     }
 
-    enqueueRender([selectedPanelId], selectedProvider)
-    toast({
-      title: "渲染任务已创建",
-      description: `分镜已加入渲染队列 (${selectedProvider})`,
-    })
+    try {
+      const { createJob } = useStudioStore.getState()
+      await createJob('image', selectedPanelId, selectedProvider)
+      toast({
+        title: "渲染任务已创建",
+        description: `分镜已加入渲染队列 (${selectedProvider})`,
+      })
+    } catch (e) {
+      toast({ title: "渲染失败", description: String(e), variant: "destructive" })
+    }
   }
 
-  const handleRenderAll = () => {
+  const handleRenderAll = async () => {
     const allPanelIds = panelList.map(p => p.id)
     if (allPanelIds.length === 0) {
       toast({
@@ -248,11 +259,20 @@ export function StudioTopbar({ projectId, chapterId, projectName, chapterTitle }
       return
     }
 
-    enqueueRender(allPanelIds, selectedProvider)
-    toast({
-      title: "批量渲染已启动",
-      description: `${allPanelIds.length} 个分镜已加入渲染队列`,
-    })
+    try {
+      const { createJob } = useStudioStore.getState()
+      const CONCURRENCY = 5
+      for (let i = 0; i < allPanelIds.length; i += CONCURRENCY) {
+        const batch = allPanelIds.slice(i, i + CONCURRENCY)
+        await Promise.allSettled(batch.map(id => createJob('image', id, selectedProvider)))
+      }
+      toast({
+        title: "批量渲染已启动",
+        description: `${allPanelIds.length} 个分镜已加入渲染队列`,
+      })
+    } catch (e) {
+      toast({ title: "批量渲染失败", description: String(e), variant: "destructive" })
+    }
   }
 
   const currentProvider = PROVIDERS.find(p => p.value === selectedProvider)
@@ -367,10 +387,9 @@ export function StudioTopbar({ projectId, chapterId, projectName, chapterTitle }
               canRender={canRender}
               pendingAssetsCount={pendingAssetsCount}
               onOpenAssetsLock={() => {
-                // 切换到资产锁定 tab
+                // 切换到资产 tab
                 useStudioStore.setState({
-                  showAssetsLockPanel: true,
-                  activeInspectorTab: 'assets-lock'
+                  activeInspectorTab: 'assets'
                 })
               }}
               onRenderStart={() => {

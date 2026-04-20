@@ -89,11 +89,24 @@ export const ClipRow = memo(function ClipRow({ clip, index, isFirst, isLast }: C
   const isRunning = liveStatus === 'Running' || liveStatus === 'Queued'
 
   const handleGenerate = async () => {
+    const startFrameUrl = clip.startFrame?.url || (panelSpec as any)?.render?.preview_url
+    const endFrameUrl = clip.endFrame?.url
+
     updateClip(clip.id, { status: 'Queued', progress: 0 })
     await createJob('video', clip.id, clip.provider, {
-      durationSec: clip.durationSec,
+      start_frame_url: startFrameUrl,
+      end_frame_url: clip.motionMode === 'dual_keyframe' ? endFrameUrl : undefined,
+      motion_prompt: clip.motionPrompt,
+      negative_prompt: clip.negative,
+      motion_mode: clip.motionMode,
+      duration_sec: clip.durationSec,
       fps: clip.fps,
-      motionPrompt: clip.motionPrompt,
+      width: clip.startFrame?.w ?? 1080,
+      height: clip.startFrame?.h ?? 1920,
+      resolution: `${clip.startFrame?.w ?? 1080}x${clip.startFrame?.h ?? 1920}`,
+      motion_strength: 0.5,
+      prompt_extend: true,
+      source: 'clip_row',
     })
   }
 

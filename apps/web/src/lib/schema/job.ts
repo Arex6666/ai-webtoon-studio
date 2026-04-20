@@ -8,8 +8,11 @@ export const RenderProvider = z.enum([
     'keling',
     'tongyi',
     'doubao',
+    'deepseek',
 ])
 export type RenderProvider = z.infer<typeof RenderProvider>
+
+export type RenderTier = 'fast' | 'normal' | 'hero'
 
 export const RenderJobStatus = z.enum([
     'Queued',

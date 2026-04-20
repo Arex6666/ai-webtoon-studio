@@ -6,7 +6,7 @@ from kombu import Queue
 import os
 
 # Redis URL
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
 
 # 创建 Celery 应用
 celery_app = Celery(
@@ -17,8 +17,11 @@ celery_app = Celery(
         "app.workers.image_worker",
         "app.workers.anchor_worker",
         "app.workers.video_worker",
+        "app.workers.episode_video_worker",
         "app.workers.export_worker",
         "app.workers.advanced_worker",
+        "app.workers.async_runner",
+        "app.workers.bundle_worker",
     ]
 )
 
@@ -55,6 +58,7 @@ celery_app.conf.update(
         "app.workers.image_worker.*": {"queue": "image"},
         "app.workers.anchor_worker.*": {"queue": "anchor"},
         "app.workers.video_worker.*": {"queue": "video"},
+        "app.workers.episode_video_worker.*": {"queue": "video"},
         "app.workers.export_worker.*": {"queue": "export"},
     },
     

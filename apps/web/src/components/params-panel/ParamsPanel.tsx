@@ -71,7 +71,7 @@ export function ParamsPanel({ onParamsChange }: ParamsPanelProps) {
     onParamsChange?.(newValues);
   };
 
-  const applyPreset = (preset: typeof PRESETS.look[0]) => {
+  const applyPreset = (preset: { id: string; name: string; icon: string; values: Record<string, number> }) => {
     const newValues = { ...values, ...preset.values };
     setValues(newValues);
     onParamsChange?.(newValues);

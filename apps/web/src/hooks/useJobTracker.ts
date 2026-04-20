@@ -8,6 +8,7 @@ interface JobTrackerState {
   status: JobStatus
   progress: number
   message?: string
+  agent?: string
   result?: Record<string, unknown>
   error?: string
   isComplete: boolean
@@ -38,6 +39,7 @@ export function useJobTracker(jobId: string | null): JobTrackerState {
       status: storeJob.status as JobStatus,
       progress: storeJob.progress ?? 0,
       message: storeJob.message,
+      agent: storeJob.agent,
       result: storeJob.result,
       error: storeJob.error,
       isComplete: TERMINAL_STATUSES.includes(storeJob.status as JobStatus),
@@ -52,6 +54,7 @@ export function useJobTracker(jobId: string | null): JobTrackerState {
         status: res.status,
         progress: res.progress,
         message: res.message,
+        agent: res.agent,
         result: res.result,
         error: res.error,
         isComplete: TERMINAL_STATUSES.includes(res.status),
@@ -60,6 +63,7 @@ export function useJobTracker(jobId: string | null): JobTrackerState {
         status: res.status,
         progress: res.progress,
         message: res.message,
+        agent: res.agent,
         result: res.result,
         error: res.error,
       })

@@ -3,6 +3,7 @@
 """
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
@@ -11,6 +12,16 @@ import logging
 
 from app.core.database import get_db
 from app.models.project import Project
+from app.models.chapter import Chapter
+from app.models.panel import Panel
+from app.models.timeline import Timeline, Clip
+from app.models.asset import Asset
+from app.models.prop_asset import PropAsset
+from app.models.asset_relation import AssetRelation
+from app.models.voice_asset import VoiceAgent, MusicAsset
+from app.models.snapshot import Snapshot
+from app.models.job import Job
+from app.models.conversation import Conversation
 from app.services.brain.standard_llm import StandardLLMService
 
 logger = logging.getLogger(__name__)
@@ -84,6 +95,15 @@ async def list_projects(
     total = query.count()
     projects = query.order_by(Project.updated_at.desc()).offset(skip).limit(limit).all()
 
+    # Batch count chapters per project (avoids N+1)
+    project_ids = [p.id for p in projects]
+    chapter_counts: dict = {}
+    if project_ids:
+        rows = db.query(
+            Chapter.project_id, func.count(Chapter.id)
+        ).filter(Chapter.project_id.in_(project_ids)).group_by(Chapter.project_id).all()
+        chapter_counts = {pid: cnt for pid, cnt in rows}
+
     items = []
     for p in projects:
         item = ProjectResponse(
@@ -95,7 +115,7 @@ async def list_projects(
             creation_method=p.creation_method,
             created_at=p.created_at,
             updated_at=p.updated_at,
-            chapter_count=len(p.chapters)
+            chapter_count=chapter_counts.get(p.id, 0)
         )
         items.append(item)
 
@@ -272,6 +292,40 @@ async def delete_project(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    # Explicit manual cascades to bypass SQLite IntegrityErrors for unconfigured schemas
+    # 1. Get all chapters to delete their nested entities
+    chapter_ids = [c.id for c in project.chapters]
+    if chapter_ids:
+        # 1.a Delete Clips
+        db.query(Clip).filter(
+            Clip.timeline_id.in_(db.query(Timeline.id).filter(Timeline.chapter_id.in_(chapter_ids)))
+        ).delete(synchronize_session=False)
+        db.query(Clip).filter(
+            Clip.panel_id.in_(db.query(Panel.id).filter(Panel.chapter_id.in_(chapter_ids)))
+        ).delete(synchronize_session=False)
+        
+        # 1.b Delete Timelines
+        db.query(Timeline).filter(Timeline.chapter_id.in_(chapter_ids)).delete(synchronize_session=False)
+
+        # 1.c Delete Panels
+        db.query(Panel).filter(Panel.chapter_id.in_(chapter_ids)).delete(synchronize_session=False)
+
+        # 1.d Delete Snapshots belonging to chapters
+        db.query(Snapshot).filter(Snapshot.chapter_id.in_(chapter_ids)).delete(synchronize_session=False)
+
+    # 2. Delete project level entities
+    db.query(Snapshot).filter(Snapshot.project_id == project_id).delete(synchronize_session=False)
+    db.query(VoiceAgent).filter(VoiceAgent.project_id == project_id).delete(synchronize_session=False)
+    db.query(MusicAsset).filter(MusicAsset.project_id == project_id).delete(synchronize_session=False)
+    db.query(AssetRelation).filter(AssetRelation.project_id == project_id).delete(synchronize_session=False)
+    db.query(Asset).filter(Asset.project_id == project_id).delete(synchronize_session=False)
+    db.query(PropAsset).filter(PropAsset.project_id == project_id).delete(synchronize_session=False)
+    db.query(Job).filter(Job.project_id == project_id).delete(synchronize_session=False)
+    db.query(Conversation).filter(Conversation.project_id == project_id).delete(synchronize_session=False)
+    
+    # 3. Delete chapters
+    db.query(Chapter).filter(Chapter.project_id == project_id).delete(synchronize_session=False)
 
     db.delete(project)
     db.commit()

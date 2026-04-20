@@ -1,6 +1,7 @@
 'use client'
 
 import { useStudioStore } from '@/lib/store/studioStore'
+import { useShallow } from 'zustand/react/shallow'
 import { STRATEGY_LABELS, FixStrategy } from '@/lib/schema/fixPlan'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -25,7 +26,9 @@ export function FixModal() {
         updateFixPlanDraft,
         submitFixPlan,
         viewer,
-    } = useStudioStore()
+    } = useStudioStore(
+    useShallow(s => ({ fixModal: s.fixModal, closeFixModal: s.closeFixModal, updateFixPlanDraft: s.updateFixPlanDraft, submitFixPlan: s.submitFixPlan, viewer: s.viewer }))
+  )
 
     const { open, draft } = fixModal
 

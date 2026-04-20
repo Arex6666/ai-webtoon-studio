@@ -10,6 +10,7 @@ import { ExportSpec, ExportJob, createExportJob } from '@/lib/schema/exportSpec'
 import { Provider } from '@/lib/schema/provider'
 import { WsEvent } from '@/lib/ws/events'
 import { connect, getConnection } from '@/lib/ws/client'
+import { jobApi } from '@/lib/api/jobApi'
 
 interface PanelListItem {
   id: string
@@ -94,16 +95,20 @@ interface StudioStore {
   exportJobOrder: string[]
   selectedClipId: string | null
 
-  // Unified jobs (Task 08/09: WS-driven, provider-agnostic)
   unifiedJobs: Record<string, {
     status: string
     progress: number
     message?: string
+    agent?: string
     result?: Record<string, unknown>
     error?: string
     type?: string
   }>
   wsConnected: boolean
+
+  // Render tier
+  defaultTier: 'fast' | 'normal' | 'hero'
+  setDefaultTier: (tier: 'fast' | 'normal' | 'hero') => void
 
   // UI state
   isDirty: boolean
@@ -257,11 +262,13 @@ const initialState = {
     status: string
     progress: number
     message?: string
+    agent?: string
     result?: Record<string, unknown>
     error?: string
     type?: string
   }>,
   wsConnected: false,
+  defaultTier: 'normal' as 'fast' | 'normal' | 'hero',
   isDirty: false,
   script: '',
   storyboardJob: null as StoryboardJobState | null,
@@ -285,6 +292,7 @@ const initialState = {
 export const useStudioStore = create<StudioStore>((set, get) => ({
   ...initialState,
 
+  setDefaultTier: (tier) => set({ defaultTier: tier }),
   setContext: (projectId, chapterId) => set({ projectId, chapterId }),
   setPanelList: (list) => set({ panelList: list }),
   selectPanel: (id) => set({ selectedPanelId: id }),
@@ -515,8 +523,254 @@ export const useStudioStore = create<StudioStore>((set, get) => ({
   // ============ Unified Job Actions (Task 08/09) ============
 
   createJob: async (type, targetId, provider, params) => {
-    const { jobApi } = await import('@/lib/api/jobApi')
-    const res = await jobApi.create({ type: type as any, target_id: targetId, provider, params })
+    const state = get()
+    const normalizedParams: Record<string, unknown> = { ...(params ?? {}) }
+
+    const isEmpty = (value: unknown): boolean => {
+      if (value === undefined || value === null) return true
+      return typeof value === 'string' && value.trim() === ''
+    }
+
+    const setIfMissing = (key: string, value: unknown) => {
+      if (isEmpty(value)) return
+      if (isEmpty(normalizedParams[key])) {
+        normalizedParams[key] = value
+      }
+    }
+
+    const getStringParam = (keys: string[]): string | undefined => {
+      for (const key of keys) {
+        const value = normalizedParams[key]
+        if (typeof value === 'string' && value.trim()) {
+          return value.trim()
+        }
+      }
+      return undefined
+    }
+
+    const getNumberParam = (keys: string[]): number | undefined => {
+      for (const key of keys) {
+        const value = normalizedParams[key]
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          return value
+        }
+        if (typeof value === 'string' && value.trim()) {
+          const parsed = Number(value)
+          if (Number.isFinite(parsed)) {
+            return parsed
+          }
+        }
+      }
+      return undefined
+    }
+
+    const getBoolParam = (keys: string[]): boolean | undefined => {
+      for (const key of keys) {
+        const value = normalizedParams[key]
+        if (typeof value === 'boolean') {
+          return value
+        }
+        if (typeof value === 'number') {
+          return value !== 0
+        }
+        if (typeof value === 'string') {
+          const normalized = value.trim().toLowerCase()
+          if (['true', '1', 'yes', 'on'].includes(normalized)) return true
+          if (['false', '0', 'no', 'off'].includes(normalized)) return false
+        }
+      }
+      return undefined
+    }
+
+    const getResolutionByAspect = (aspect?: string): { width: number; height: number } => {
+      const normalized = (aspect || '').trim()
+      if (normalized === '16:9') return { width: 1920, height: 1080 }
+      if (normalized === '1:1') return { width: 1024, height: 1024 }
+      if (normalized === '4:3') return { width: 1440, height: 1080 }
+      if (normalized === '3:4') return { width: 1080, height: 1440 }
+      return { width: 1080, height: 1920 }
+    }
+
+    const timelineClips = Object.values(state.timelineByChapter).flatMap(t => t.clips || [])
+    const clip = timelineClips.find(c => c.id === targetId) ?? timelineClips.find(c => c.panelId === targetId)
+    const panelId = type === 'video' ? (clip?.panelId ?? targetId) : targetId
+    const panel = state.panelList.find(p => p.id === panelId)
+    const panelSpecAny: any = panelId ? state.panelSpecs[panelId] : undefined
+
+    if (type === 'image') {
+      const basePrompt =
+        getStringParam(['positive_prompt', 'prompt_override', 'prompt']) ||
+        panelSpecAny?.prompt?.positive ||
+        panelSpecAny?.shot?.description ||
+        panelSpecAny?.action_description ||
+        panel?.description ||
+        panel?.title
+
+      const styleHint =
+        getStringParam(['style_hint', 'styleHint']) ||
+        state.storyboardSettings?.stylePreset ||
+        panelSpecAny?.look?.style_preset ||
+        panelSpecAny?.style?.styleProfileId
+
+      const negativePrompt =
+        getStringParam(['negative_prompt', 'negativePrompt', 'negative']) ||
+        panelSpecAny?.prompt?.negative ||
+        panelSpecAny?.style?.negativePrompt ||
+        panelSpecAny?.look?.negative_prompt
+
+      const aspect =
+        getStringParam(['aspect_ratio', 'aspectRatio']) ||
+        panelSpecAny?.metadata?.aspect_ratio ||
+        panelSpecAny?.aspect_ratio
+      const { width, height } = getResolutionByAspect(aspect)
+
+      setIfMissing('provider', provider)
+      setIfMissing('prompt', basePrompt)
+      setIfMissing('positive_prompt', basePrompt)
+      setIfMissing('prompt_override', basePrompt)
+      setIfMissing('negative_prompt', negativePrompt)
+      setIfMissing('style_hint', styleHint)
+      setIfMissing('width', width)
+      setIfMissing('height', height)
+      setIfMissing('resolution', `${width}x${height}`)
+      setIfMissing('steps', provider === 'comfyui' ? 28 : 24)
+      setIfMissing('sampler', 'euler')
+      setIfMissing('scheduler', 'normal')
+      setIfMissing('guidance_scale', 2.5)
+      setIfMissing('source', 'studio_workbench')
+    }
+
+    if (type === 'video') {
+      const getFrameUrl = (frame: unknown): string | undefined => {
+        if (!frame) return undefined
+        if (typeof frame === 'string' && frame.trim()) return frame.trim()
+        if (typeof frame === 'object' && frame && 'url' in frame) {
+          const url = (frame as { url?: unknown }).url
+          if (typeof url === 'string' && url.trim()) return url.trim()
+        }
+        return undefined
+      }
+
+      const startFrameFromClip = getFrameUrl(clip?.startFrame)
+      const endFrameFromClip = getFrameUrl(clip?.endFrame)
+
+      const motionMode =
+        getStringParam(['motion_mode', 'motionMode']) ||
+        clip?.motionMode ||
+        (endFrameFromClip ? 'dual_keyframe' : 'single_keyframe')
+
+      const basePrompt =
+        getStringParam(['motion_prompt', 'motionPrompt', 'prompt']) ||
+        clip?.motionPrompt ||
+        panel?.description ||
+        panelSpecAny?.action_description ||
+        panel?.title ||
+        'cinematic motion shot'
+
+      const shotType =
+        getStringParam(['shot_type', 'shotType']) ||
+        panel?.shotType ||
+        panelSpecAny?.shot?.shotType ||
+        panelSpecAny?.composition?.shot_size
+      const cameraMove =
+        getStringParam(['camera_move', 'cameraMove']) ||
+        panelSpecAny?.shot?.cameraMove ||
+        panelSpecAny?.camera_motion?.type
+      const sceneLocation =
+        getStringParam(['location']) ||
+        panel?.location ||
+        panelSpecAny?.scene?.location ||
+        panelSpecAny?.scene?.name
+      const sceneTime =
+        getStringParam(['time_of_day', 'timeOfDay']) ||
+        panelSpecAny?.scene?.time_of_day ||
+        panelSpecAny?.scene?.timeOfDay
+      const sceneWeather = getStringParam(['weather']) || panelSpecAny?.scene?.weather
+      const sceneMood = getStringParam(['mood']) || panelSpecAny?.scene?.mood
+      const styleHint =
+        getStringParam(['style_hint', 'styleHint']) ||
+        state.storyboardSettings?.stylePreset ||
+        panelSpecAny?.look?.style_preset ||
+        panelSpecAny?.style?.styleProfileId
+
+      const detailSegments: string[] = []
+      if (shotType) detailSegments.push(`shot type: ${shotType}`)
+      if (cameraMove && cameraMove !== 'none') detailSegments.push(`camera movement: ${cameraMove}`)
+      if (sceneLocation) detailSegments.push(`location: ${sceneLocation}`)
+      if (sceneTime) detailSegments.push(`time: ${sceneTime}`)
+      if (sceneWeather) detailSegments.push(`weather: ${sceneWeather}`)
+      if (sceneMood) detailSegments.push(`mood: ${sceneMood}`)
+      if (styleHint) detailSegments.push(`style: ${styleHint}`)
+      const detailedPrompt = detailSegments.length > 0
+        ? `${basePrompt}. ${detailSegments.join('; ')}`
+        : basePrompt
+
+      const negativePrompt =
+        getStringParam(['negative_prompt', 'negativePrompt', 'negative']) ||
+        clip?.negative ||
+        panelSpecAny?.prompt?.negative ||
+        panelSpecAny?.style?.negativePrompt
+
+      const startFrameUrl =
+        getStringParam(['start_frame_url', 'startFrameUrl']) ||
+        startFrameFromClip ||
+        panel?.previewUrl
+      const endFrameUrl =
+        getStringParam(['end_frame_url', 'endFrameUrl']) ||
+        endFrameFromClip
+
+      const durationSec = getNumberParam(['duration_sec', 'durationSec']) ?? clip?.durationSec ?? panel?.duration ?? 3
+      const fps = getNumberParam(['fps']) ?? clip?.fps ?? 24
+      const motionStrength = getNumberParam(['motion_strength', 'motionStrength']) ?? 0.5
+      const promptExtend = getBoolParam(['prompt_extend', 'promptExtend'])
+
+      const aspect =
+        getStringParam(['aspect_ratio', 'aspectRatio']) ||
+        panelSpecAny?.metadata?.aspect_ratio ||
+        panelSpecAny?.aspect_ratio
+      const { width, height } = getResolutionByAspect(aspect)
+
+      const defaultModel =
+        provider === 'tongyi'
+          ? 'wanx2.1-i2v-plus'
+          : provider === 'doubao'
+            ? 'jimeng-video-v1'
+            : undefined
+
+      setIfMissing('clip_id', clip?.id)
+      setIfMissing('panel_id', panelId)
+      setIfMissing('provider', provider)
+      setIfMissing('motion_mode', motionMode)
+      setIfMissing('start_frame_url', startFrameUrl)
+      if (motionMode === 'dual_keyframe') {
+        setIfMissing('end_frame_url', endFrameUrl)
+      }
+      setIfMissing('motion_prompt', detailedPrompt)
+      setIfMissing('negative_prompt', negativePrompt || '')
+      setIfMissing('duration_sec', Math.max(0.5, Math.min(12, durationSec)))
+      setIfMissing('fps', Math.max(6, Math.min(60, Math.round(fps))))
+      setIfMissing('motion_strength', Math.max(0, Math.min(1, motionStrength)))
+      setIfMissing('prompt_extend', promptExtend ?? true)
+      setIfMissing('width', width)
+      setIfMissing('height', height)
+      setIfMissing('resolution', `${width}x${height}`)
+      setIfMissing('model', defaultModel)
+      setIfMissing('shot_type', shotType)
+      setIfMissing('camera_move', cameraMove)
+      setIfMissing('style_hint', styleHint)
+      setIfMissing('location', sceneLocation)
+      setIfMissing('time_of_day', sceneTime)
+      setIfMissing('weather', sceneWeather)
+      setIfMissing('mood', sceneMood)
+      setIfMissing('source', 'studio_workbench')
+    }
+
+    const res = await jobApi.create({
+      type: type as any,
+      target_id: targetId,
+      provider,
+      params: normalizedParams,
+    })
     set(s => ({
       unifiedJobs: {
         ...s.unifiedJobs,
@@ -542,7 +796,7 @@ export const useStudioStore = create<StudioStore>((set, get) => ({
       const job = s.unifiedJobs[jobId] || { status: 'queued', progress: 0 }
       switch (type) {
         case 'job_progress':
-          return { unifiedJobs: { ...s.unifiedJobs, [jobId]: { ...job, progress: payload.progress, message: payload.message } } }
+          return { unifiedJobs: { ...s.unifiedJobs, [jobId]: { ...job, progress: payload.progress, message: payload.message, agent: payload.agent } } }
         case 'job_status':
           return { unifiedJobs: { ...s.unifiedJobs, [jobId]: { ...job, status: payload.status, error: payload.error } } }
         case 'job_result':

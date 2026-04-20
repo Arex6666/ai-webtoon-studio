@@ -1,13 +1,13 @@
 """Unified Job API request/response schemas."""
 from typing import Literal, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class JobCreateRequest(BaseModel):
     type: Literal["image", "video", "storyboard", "export"]
     target_id: str
     provider: str = "mock"
-    params: dict = {}
+    params: dict = Field(default_factory=dict)
 
 
 class JobStatusResponse(BaseModel):

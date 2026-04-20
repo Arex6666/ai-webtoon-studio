@@ -4,6 +4,7 @@
  */
 
 import { WsEvent } from './events'
+import { env } from '../utils/env'
 
 type EventHandler = (event: WsEvent) => void
 
@@ -35,8 +36,7 @@ export class RealWsClient {
 
     constructor(baseUrl?: string, reconnectConfig?: Partial<ReconnectConfig>) {
         // 构建 WebSocket URL
-        const apiUrl = baseUrl || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-        this.url = apiUrl.replace(/^http/, 'ws')
+        this.url = baseUrl || env.WS_BASE_URL
         this.reconnectConfig = { ...DEFAULT_RECONNECT, ...reconnectConfig }
     }
 
@@ -245,6 +245,8 @@ export class RealWsClient {
                         payload: {
                             jobId: data.job_id as string,
                             progress: data.progress as number,
+                            message: data.message as string | undefined,
+                            agent: data.agent as string | undefined,
                         },
                     }
                 }
@@ -255,6 +257,40 @@ export class RealWsClient {
                         jobId: data.job_id as string,
                         status: this.mapJobStatus(data.status as string),
                         error: data.error as string | undefined,
+                    },
+                }
+
+            case 'job_progress':
+                return {
+                    type: 'job_progress',
+                    ts,
+                    payload: {
+                        jobId: data.jobId as string,
+                        progress: data.progress as number,
+                        message: data.message as string | undefined,
+                        agent: data.agent as string | undefined,
+                    },
+                }
+                
+            case 'job_status':
+                return {
+                    type: 'job_status',
+                    ts,
+                    payload: {
+                        jobId: data.jobId as string,
+                        status: this.mapJobStatus(data.status as string),
+                        error: data.error as string | undefined,
+                    },
+                }
+
+            case 'job_result':
+                return {
+                    type: 'job_result',
+                    ts,
+                    payload: {
+                        jobId: data.jobId as string,
+                        type: data.type as string,
+                        result: data.result as Record<string, unknown>,
                     },
                 }
 
@@ -326,6 +362,31 @@ export class RealWsClient {
                         chapterId: data.chapter_id as string,
                         errorCode: data.error_code as string,
                         message: data.message as string,
+                    },
+                }
+
+            case 'export_progress':
+            case 'export_status':
+                // Backend export workers push export_progress/export_status
+                // Map to unified job events for the store
+                if (typeof data.progress === 'number' && data.status !== 'succeeded' && data.status !== 'failed') {
+                    return {
+                        type: 'job_progress',
+                        ts,
+                        payload: {
+                            jobId: data.job_id as string,
+                            progress: data.progress as number,
+                            message: data.message as string | undefined,
+                        },
+                    }
+                }
+                return {
+                    type: 'job_status',
+                    ts,
+                    payload: {
+                        jobId: data.job_id as string,
+                        status: this.mapJobStatus(data.status as string),
+                        error: data.error as string | undefined,
                     },
                 }
 

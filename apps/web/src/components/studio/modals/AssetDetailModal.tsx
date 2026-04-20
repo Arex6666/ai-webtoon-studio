@@ -81,7 +81,7 @@ export function AssetDetailModal({
                 setAsset(data)
                 setName(data.name)
                 setDescription(data.description || '')
-                setTraits(data.data_json?.appearance_traits || [])
+                setTraits((data.data_json?.appearance_traits as string[]) || [])
             } catch (error) {
                 console.error('Failed to load asset:', error)
             } finally {

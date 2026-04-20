@@ -24,6 +24,9 @@ export type WsEventType =
     | 'export_job_progress'
     | 'export_job_status'
     | 'export_ready'
+    // Export events from backend workers
+    | 'export_progress'
+    | 'export_status'
     // Storyboard Events (Task S2)
     | 'storyboard_progress'
     | 'storyboard_done'
@@ -50,6 +53,8 @@ export interface JobProgressEvent extends WsEventBase {
     payload: {
         jobId: string
         progress: number
+        message?: string
+        agent?: string
     }
 }
 
@@ -88,8 +93,9 @@ export interface QaResultEvent extends WsEventBase {
     }
 }
 
-// ============ Video Job Events (Task 06) ============
+// ============ Video Job Events (Task 06) — @deprecated: use unified job_progress/job_status/job_result ============
 
+/** @deprecated Use unified job events instead */
 export interface VideoJobCreatedEvent extends WsEventBase {
     type: 'video_job_created'
     payload: {
@@ -133,8 +139,9 @@ export interface ClipOutputReadyEvent extends WsEventBase {
     }
 }
 
-// ============ Export Job Events (Task 06) ============
+// ============ Export Job Events (Task 06) — @deprecated: use unified job_progress/job_status/job_result ============
 
+/** @deprecated Use unified job events instead */
 export interface ExportJobCreatedEvent extends WsEventBase {
     type: 'export_job_created'
     payload: {
@@ -215,17 +222,18 @@ export interface StoryboardDraftReadyEvent extends WsEventBase {
 
 // ============ Unified Job Events (Task 09) ============
 
-export interface UnifiedJobProgressEvent {
+/** @deprecated Use JobProgressEvent instead — unified events share the same shape */
+export interface UnifiedJobProgressEvent extends WsEventBase {
   type: 'job_progress'
   payload: {
     jobId: string
     progress: number
     message?: string
   }
-  timestamp: number
 }
 
-export interface UnifiedJobStatusEvent {
+/** @deprecated Use JobStatusEvent instead — unified events share the same shape */
+export interface UnifiedJobStatusEvent extends WsEventBase {
   type: 'job_status'
   payload: {
     jobId: string
@@ -233,7 +241,6 @@ export interface UnifiedJobStatusEvent {
     type?: string
     error?: string
   }
-  timestamp: number
 }
 
 export interface UnifiedJobResultEvent extends WsEventBase {

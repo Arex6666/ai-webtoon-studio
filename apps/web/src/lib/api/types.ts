@@ -143,6 +143,7 @@ export interface Asset {
     thumbnail_url?: string
     data_json: Record<string, unknown>
     status: string
+    tags?: string[]
     created_at: string
     updated_at: string
 }

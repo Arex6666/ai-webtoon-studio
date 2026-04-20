@@ -431,6 +431,8 @@ class StoryboardPanel(BaseModel):
     voice_character: str
     dialogue: str
     duration_sec: float = 5.0  # LLM-specified duration (3-10 seconds)
+    time_of_day: str = "day"   # day/night/dawn/dusk
+    weather: str = "clear"     # clear/rain/snow/cloudy
 
 
 class Highlight(BaseModel):
@@ -642,6 +644,8 @@ async def generate_full_episode_script(
                 voice_character=p.get("voice_character", ""),
                 dialogue=p.get("dialogue", ""),
                 duration_sec=max(3.0, min(10.0, float(p.get("duration_sec", 5.0)))),
+                time_of_day=p.get("time_of_day", "day"),
+                weather=p.get("weather", "clear"),
             )
             for i, p in enumerate(data.get("panels", []))
         ]

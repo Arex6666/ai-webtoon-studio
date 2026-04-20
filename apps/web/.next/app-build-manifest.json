@@ -1,55 +1,55 @@
 {
   "pages": {
+    "/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/page.js"
+    ],
     "/layout": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/agent/[projectId]/episodes/[episodeNum]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/agent/[projectId]/episodes/[episodeNum]/page.js"
-    ],
-    "/projects/[projectId]/chapters/[chapterId]/studio/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/projects/[projectId]/chapters/[chapterId]/studio/page.js"
-    ],
-    "/agent/[projectId]/episodes/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/agent/[projectId]/episodes/page.js"
-    ],
-    "/projects/[projectId]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/projects/[projectId]/page.js"
-    ],
     "/projects/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/projects/page.js"
     ],
-    "/page": [
+    "/production/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/page.js"
-    ],
-    "/agent/[projectId]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/agent/[projectId]/page.js"
+      "static/chunks/app/production/page.js"
     ],
     "/assets/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/assets/page.js"
     ],
-    "/production/page": [
+    "/projects/[projectId]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/production/page.js"
+      "static/chunks/app/projects/[projectId]/page.js"
+    ],
+    "/projects/[projectId]/chapters/[chapterId]/studio/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/projects/[projectId]/chapters/[chapterId]/studio/page.js"
+    ],
+    "/agent/[projectId]/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/agent/[projectId]/page.js"
+    ],
+    "/agent/[projectId]/episodes/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/agent/[projectId]/episodes/page.js"
+    ],
+    "/agent/[projectId]/episodes/[episodeNum]/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/agent/[projectId]/episodes/[episodeNum]/page.js"
     ]
   }
 }

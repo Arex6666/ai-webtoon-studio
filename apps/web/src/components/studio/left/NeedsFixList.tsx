@@ -1,6 +1,7 @@
 'use client'
 
 import { useStudioStore } from '@/lib/store/studioStore'
+import { useShallow } from 'zustand/react/shallow'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { AlertCircle, Wand2, ArrowRight } from 'lucide-react'
@@ -11,7 +12,9 @@ export function NeedsFixList() {
         panelList,
         selectPanel,
         openFixModal,
-    } = useStudioStore()
+    } = useStudioStore(
+    useShallow(s => ({ needsFixPanelIds: s.needsFixPanelIds, panelList: s.panelList, selectPanel: s.selectPanel, openFixModal: s.openFixModal }))
+  )
 
     if (needsFixPanelIds.length === 0) {
         return (

@@ -82,7 +82,7 @@ class PromptComposer:
         
         return PromptContract(
             prompt_version=self.prompt_version,
-            schema_version="script_analysis_v1",
+            schema_target="script_analysis_v1",
             system=system,
             developer=developer,
             user=user,
@@ -117,7 +117,7 @@ class PromptComposer:
         
         return PromptContract(
             prompt_version=self.prompt_version,
-            schema_version="storyboard_draft_v2",
+            schema_target="storyboard_draft_v2",
             system=system,
             developer=developer,
             user=user,

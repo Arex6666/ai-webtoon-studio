@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useStudioStore } from "@/lib/store/studioStore"
+import { useShallow } from "zustand/react/shallow"
 import { assetsApi } from "@/lib/api/services"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Upload } from "lucide-react"
@@ -31,7 +32,9 @@ interface CreateAssetModalProps {
 }
 
 export function CreateAssetModal({ open, onOpenChange }: CreateAssetModalProps) {
-    const { projectId, chapterId, setStudioData } = useStudioStore()
+    const { projectId, chapterId, setStudioData } = useStudioStore(
+    useShallow(s => ({ projectId: s.projectId, chapterId: s.chapterId, setStudioData: s.setStudioData }))
+  )
     const { toast } = useToast()
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)

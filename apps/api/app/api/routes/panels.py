@@ -91,7 +91,41 @@ async def list_panels(
     panels = db.query(Panel).filter(
         Panel.chapter_id == chapter_id
     ).order_by(Panel.order_index).all()
-    
+
+    # Batch pre-fetch latest completed render jobs for all panels (avoids N+1)
+    panel_ids = [p.id for p in panels]
+    render_job_map: dict = {}
+    if panel_ids:
+        from sqlalchemy import and_
+        # Get the latest completed render job per panel
+        render_jobs = db.query(RenderJob).filter(
+            RenderJob.panel_id.in_(panel_ids),
+            RenderJob.job_type == JobType.LAYER_GENERATION.value,
+            RenderJob.status == JobStatus.COMPLETED.value
+        ).order_by(RenderJob.completed_at.desc()).all()
+        for rj in render_jobs:
+            if rj.panel_id not in render_job_map:
+                render_job_map[rj.panel_id] = rj
+
+    def get_panel_image_url_batch(panel: Panel) -> Optional[str]:
+        """Get panel image URL using pre-fetched render jobs."""
+        if panel.typeset_image_url:
+            try:
+                return storage_client.get_url(panel.typeset_image_url, expires=3600)
+            except Exception:
+                pass
+        if panel.render_status == "rendered":
+            render_job = render_job_map.get(panel.id)
+            if render_job and render_job.output_data:
+                layers = render_job.output_data.get("layers", [])
+                for layer in layers:
+                    if layer.get("type") == "full" and layer.get("storage_path"):
+                        try:
+                            return storage_client.get_url(layer["storage_path"], expires=3600)
+                        except Exception:
+                            pass
+        return None
+
     items = [
         PanelResponse(
             id=p.id,
@@ -102,7 +136,7 @@ async def list_panels(
             active_layer_pack_id=p.active_layer_pack_id,
             typeset_status=p.typeset_status,
             typeset_image_url=p.typeset_image_url,
-            preview_url=get_panel_image_url(p, db),  # 获取预签名 URL
+            preview_url=get_panel_image_url_batch(p),
             qa_score=p.qa_score,
             needs_manual_fix=p.needs_manual_fix,
             created_at=p.created_at,
@@ -110,7 +144,7 @@ async def list_panels(
         )
         for p in panels
     ]
-    
+
     return PanelListResponse(items=items, total=len(items))
 
 

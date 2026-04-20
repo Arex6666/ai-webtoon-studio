@@ -32,8 +32,9 @@ import {
 
 const PROVIDER_OPTIONS = [
   { value: 'doubao', label: '豆包' },
-  { value: 'mock', label: 'Mock (测试)' },
+  { value: 'tongyi', label: '通义万相' },
   { value: 'comfyui', label: 'ComfyUI' },
+  { value: 'mock', label: 'Mock (测试)' },
 ]
 
 const DURATION_OPTIONS = [2, 3, 4, 5]
@@ -128,12 +129,27 @@ export default function VideoTab() {
     setSubmitError(null)
 
     try {
+      const defaultModel =
+        provider === 'tongyi'
+          ? 'wanx2.1-i2v-plus'
+          : provider === 'doubao'
+            ? 'jimeng-video-v1'
+            : undefined
+
       const params: Record<string, unknown> = {
         start_frame_url: panelPreviewUrl,
         motion_prompt: motionPrompt,
+        negative_prompt: '',
         motion_mode: motionMode,
         duration_sec: durationSec,
         fps,
+        width: 1080,
+        height: 1920,
+        resolution: '1080x1920',
+        motion_strength: 0.5,
+        prompt_extend: true,
+        model: defaultModel,
+        source: 'video_tab',
       }
 
       if (motionMode === 'dual_keyframe' && endFrameUrl) {
@@ -384,7 +400,7 @@ export default function VideoTab() {
             <div className="flex items-center justify-between text-sm">
               <span className="text-blue-400 flex items-center gap-1.5">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                {jobState.message ?? '生成中...'}
+                {typeof jobState.message === 'string' ? jobState.message : (jobState.message && typeof jobState.message === 'object' ? JSON.stringify(jobState.message) : '生成中...')}
               </span>
               <span className="text-blue-300 text-xs tabular-nums">
                 {Math.round(jobState.progress * 100)}%
@@ -427,7 +443,7 @@ export default function VideoTab() {
           <div className="space-y-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
             <div className="flex items-center gap-2 text-sm text-red-400">
               <XCircle className="w-4 h-4" />
-              生成失败{jobState.error ? `：${jobState.error}` : ''}
+              生成失败{jobState.error ? `：${typeof jobState.error === 'string' ? jobState.error : JSON.stringify(jobState.error)}` : ''}
             </div>
             <Button
               size="sm"

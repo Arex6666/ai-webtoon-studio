@@ -143,6 +143,11 @@ class LocationEntity(BaseModel):
         description="场景锚点描述（至少 1 句，用于 BG anchor 生成）"
     )
     
+    is_reused: bool = Field(
+        default=False,
+        description="是否是重复出现的已知场景"
+    )
+    
     first_appearance_span: SourceSpan = Field(
         ...,
         description="首次出现的原文引用（必须）"
