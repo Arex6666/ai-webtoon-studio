@@ -1,14 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Film, Loader2, ArrowLeft, Sparkles, Play } from 'lucide-react'
+import { Film, Loader2, ArrowLeft, Sparkles, Play, Upload, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 
 import { projectsApi, conversationsApi } from '@/lib/api'
+import { agentApi } from '@/lib/api/services'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { useToast } from '@/hooks/use-toast'
 
 interface Episode {
     number: number
@@ -28,11 +30,14 @@ export default function EpisodesPage() {
     const params = useParams()
     const router = useRouter()
     const projectId = params.projectId as string
+    const { toast } = useToast()
 
     const [project, setProject] = useState<ProjectData | null>(null)
     const [episodes, setEpisodes] = useState<Episode[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [mainConvId, setMainConvId] = useState<string | null>(null)
+    const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null)
 
     useEffect(() => {
         const loadProjectAndEpisodes = async () => {
@@ -45,10 +50,14 @@ export default function EpisodesPage() {
                 const conversations = await conversationsApi.listByProject(projectId, 20, 0)
 
                 if (conversations && conversations.length > 0) {
-                    // 找到消息最多的对话（主对话）
-                    const mainConv = conversations.reduce((best, conv) =>
+                    // 找到消息最多的主对话（排除已绑定到具体分集的对话）
+                    const mainConvs = conversations.filter((c: any) => !c.episode_number)
+                    const pool = mainConvs.length > 0 ? mainConvs : conversations
+                    const mainConv = pool.reduce((best: any, conv: any) =>
                         (conv.message_count > best.message_count) ? conv : best
-                        , conversations[0])
+                        , pool[0])
+
+                    setMainConvId(mainConv.id)
 
                     // 从对话中提取集数信息
                     const messages = await conversationsApi.getMessages(mainConv.id, 100, 0)
@@ -140,6 +149,129 @@ export default function EpisodesPage() {
         router.push(`/agent/${projectId}/episodes/${episode.number}`)
     }
 
+    // ─── Bulk commit: for each episode, read cached pipeline data from its conversation ───
+    // and send full payload. Episodes that haven't been generated yet fall back to lean payload.
+    const handleCommitAll = useCallback(async () => {
+        if (!mainConvId) {
+            toast({ title: '缺少对话上下文', description: '请先在主对话中生成大纲', variant: 'destructive' })
+            return
+        }
+        if (episodes.length === 0) {
+            toast({ title: '暂无分集可提交', variant: 'destructive' })
+            return
+        }
+
+        setBulkProgress({ done: 0, total: episodes.length })
+        const failures: Array<{ num: number; reason: string }> = []
+        const skeletalOnly: number[] = []
+        let successCount = 0
+
+        for (let i = 0; i < episodes.length; i++) {
+            const ep = episodes[i]
+            try {
+                // Step 1: locate this episode's conversation
+                const episodeConv = await conversationsApi.getOrCreateEpisode(projectId, ep.number)
+
+                // Step 2: read cached pipeline data (script_data + panel_images) from message history
+                let scriptData: any = null
+                let panelImages: Record<string, string> = {}
+
+                if (episodeConv.message_count > 0) {
+                    const episodeMessages = await conversationsApi.getMessages(episodeConv.id, 100, 0)
+                    const pipelineMsg = [...(episodeMessages || [])].reverse().find((m: any) =>
+                        m.entities_json?.card?.type === 'episode_pipeline'
+                    )
+                    if (pipelineMsg?.entities_json?.card) {
+                        scriptData = pipelineMsg.entities_json.card.script_data ?? null
+                        panelImages = pipelineMsg.entities_json.card.panel_images ?? {}
+                    }
+                }
+
+                // Step 3: build payload. Full if cached data present; lean fallback otherwise.
+                let payload: Parameters<typeof agentApi.commitToStudio>[1]
+                if (scriptData && Array.isArray(scriptData.panels) && scriptData.panels.length > 0) {
+                    payload = {
+                        conversation_id: episodeConv.id,
+                        episode_number: ep.number,
+                        episode_title: scriptData.episode_title ?? ep.title ?? '',
+                        outline_summary: scriptData.story_summary ?? ep.summary ?? '',
+                        art_style: scriptData.art_style ?? {},
+                        characters: (scriptData.characters ?? []).map((c: any) => ({
+                            name: c.name,
+                            visual_prompt: c.visual_prompt ?? c.description ?? '',
+                            temp_image_url: c.image_url,
+                            appearance_traits: [],
+                            personality_traits: [],
+                            wardrobe_notes: undefined,
+                        })),
+                        scenes: (scriptData.scenes ?? []).map((s: any) => ({
+                            name: s.name,
+                            visual_prompt: s.visual_prompt ?? s.description ?? '',
+                            temp_image_url: s.image_url,
+                            time_of_day: undefined,
+                            weather: undefined,
+                            mood: undefined,
+                        })),
+                        panels: (scriptData.panels ?? []).map((p: any, idx: number) => ({
+                            id: p.id,
+                            order: idx,
+                            scene_name: p.scene_name,
+                            characters: p.characters ?? [],
+                            scene_description: p.scene_description ?? '',
+                            dialogue: p.dialogue,
+                            shot_type: 'MS',
+                            camera_angle: 'eye-level',
+                            emotion: undefined,
+                            composition: p.composition,
+                            temp_image_url: panelImages[p.id] ?? p.image_url,
+                        })),
+                    }
+                } else {
+                    // Lean fallback: creates a skeletal chapter only. User must commit from
+                    // episode detail page to populate panels/characters/scenes.
+                    skeletalOnly.push(ep.number)
+                    payload = {
+                        conversation_id: episodeConv.id,
+                        episode_number: ep.number,
+                        episode_title: ep.title ?? '',
+                        outline_summary: ep.summary ?? '',
+                    }
+                }
+
+                await agentApi.commitToStudio(projectId, payload)
+                successCount += 1
+            } catch (e) {
+                const reason = e instanceof Error ? e.message : String(e)
+                failures.push({ num: ep.number, reason })
+                toast({
+                    title: `第${ep.number}集提交失败`,
+                    description: reason,
+                    variant: 'destructive',
+                })
+            }
+            setBulkProgress({ done: i + 1, total: episodes.length })
+        }
+
+        setBulkProgress(null)
+
+        // Summary toast
+        if (failures.length === 0) {
+            const skeletalNote = skeletalOnly.length > 0
+                ? `其中第 ${skeletalOnly.join('、')} 集尚未生成剧本，仅创建了章节骨架，请进入各集详情页完善后再次提交。`
+                : ''
+            toast({
+                title: '全部提交完成',
+                description: `${successCount}/${episodes.length} 集已提交到 Studio。${skeletalNote}`,
+            })
+        } else {
+            toast({
+                title: `${successCount}/${episodes.length} 成功`,
+                description: `失败: 第 ${failures.map(f => f.num).join('、')} 集`,
+                variant: 'destructive',
+            })
+        }
+    }, [episodes, mainConvId, projectId, toast])
+
     if (isLoading) {
         return (
             <div className="flex-1 h-full bg-[#000000] flex items-center justify-center">
@@ -172,12 +304,40 @@ export default function EpisodesPage() {
                         返回对话
                     </Link>
 
-                    <h1 className="text-2xl font-bold text-white mb-2">
-                        {project?.name || '未命名项目'}
-                    </h1>
-                    <p className="text-zinc-500">
-                        选择一集开始创作剧本。Agent 将基于你的大纲和偏好，智能生成完整的分镜剧本。
-                    </p>
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <h1 className="text-2xl font-bold text-white mb-2">
+                                {project?.name || '未命名项目'}
+                            </h1>
+                            <p className="text-zinc-500">
+                                选择一集开始创作剧本。Agent 将基于你的大纲和偏好，智能生成完整的分镜剧本。
+                            </p>
+                        </div>
+                        <Button
+                            onClick={handleCommitAll}
+                            disabled={!mainConvId || bulkProgress !== null || episodes.length === 0}
+                            variant="secondary"
+                            size="sm"
+                            className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white border-0"
+                            title={
+                                !mainConvId
+                                    ? '缺少对话上下文'
+                                    : '将所有分集提交到 Studio；未生成剧本的分集仅会创建章节骨架'
+                            }
+                        >
+                            {bulkProgress ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    提交中 {bulkProgress.done}/{bulkProgress.total}
+                                </>
+                            ) : (
+                                <>
+                                    <Upload className="h-4 w-4 mr-2" />
+                                    一键提交全部到 Studio
+                                </>
+                            )}
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Episodes Grid */}
@@ -214,7 +374,7 @@ export default function EpisodesPage() {
                                     {episode.summary}
                                 </CardDescription>
                             </CardHeader>
-                            <CardContent className="pt-0">
+                            <CardContent className="pt-0 flex flex-col gap-2">
                                 <Button
                                     variant="ghost"
                                     size="sm"
@@ -231,6 +391,18 @@ export default function EpisodesPage() {
                                             开始创作
                                         </>
                                     )}
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="w-full justify-center gap-2 border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        router.push(`/agent/${projectId}/episodes/${episode.number}`)
+                                    }}
+                                >
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                    打开详情
                                 </Button>
                             </CardContent>
                         </Card>
