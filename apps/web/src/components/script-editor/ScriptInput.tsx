@@ -75,12 +75,40 @@ export function ScriptInput({ onParsed, onError, chapterId }: ScriptInputProps) 
     }
   }, [script, style, onParsed, onError]);
 
-  const handleConfirm = useCallback(async () => {
-    if (!result || !chapterId) return;
-
-    // TODO: 调用创建分镜的 API
-    console.log('Creating panels for chapter:', chapterId, result.panels);
-  }, [result, chapterId]);
+    const handleConfirm = useCallback(async () => {
+        if (!chapterId) {
+            setError('缺少章节 ID');
+            setStatus('error');
+            return;
+        }
+        setStatus('generating');
+        setError(null);
+        setProgress(null);
+        try {
+            const response = await fetch(
+                `${api.baseUrl}/api/v1/chapters/${chapterId}/storyboard`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        provider: 'doubao',
+                        style_hint: style,
+                        target_panels: result?.panels?.length ?? null,
+                        auto_apply: true,
+                    }),
+                },
+            );
+            if (!response.ok) throw new Error(`生成失败 (${response.status})`);
+            const data: { job_id: string; status: string } = await response.json();
+            setStoryboardJobId(data.job_id);
+            if (data.status === 'succeeded') {
+                setStatus('done');
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : '生成失败');
+            setStatus('error');
+        }
+    }, [chapterId, style, result]);
 
   return (
     <div className="flex flex-col h-full bg-zinc-900 rounded-xl border border-zinc-800">
@@ -126,40 +154,68 @@ export function ScriptInput({ onParsed, onError, chapterId }: ScriptInputProps) 
         <span className="float-right">{script.length} 字符</span>
       </div>
 
-      {/* 操作栏 */}
-      <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-800 bg-zinc-800/30">
-        <div className="flex items-center gap-4 text-sm text-zinc-400">
-          {result && (
-            <>
-              <span>🎬 {result.panels.length} 个分镜</span>
-              <span>👤 {result.detected_characters.length} 个角色</span>
-              <span>📍 {result.detected_scenes.length} 个场景</span>
-              <span>⏱️ {result.total_duration.toFixed(1)}s</span>
-            </>
-          )}
+      {/* 操作栏 - 统计信息 */}
+      {result && (
+        <div className="flex items-center gap-4 px-4 py-2 border-t border-zinc-800 bg-zinc-800/30 text-sm text-zinc-400">
+          <span>🎬 {result.panels.length} 个分镜</span>
+          <span>👤 {result.detected_characters.length} 个角色</span>
+          <span>📍 {result.detected_scenes.length} 个场景</span>
+          <span>⏱️ {result.total_duration.toFixed(1)}s</span>
         </div>
-        <div className="flex items-center gap-2">
-          {error && status === 'error' && (
-            <span className="text-sm text-rose-400">{error}</span>
-          )}
-          <button
-            onClick={handleParse}
-            disabled={status === 'parsing' || status === 'generating' || !script.trim()}
-            className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
-          >
-            {status === 'parsing' ? (
-              <>
-                <span className="animate-spin">⏳</span>
-                解析中...
-              </>
-            ) : (
-              <>
-                ✨ 自动分镜
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+      )}
+
+      {/* 状态驱动操作栏 */}
+            <div className="px-4 py-3 border-t border-zinc-800 flex items-center gap-2">
+                {status === 'empty' || status === 'edited' || status === 'error' ? (
+                    <button
+                        onClick={handleParse}
+                        disabled={!script.trim()}
+                        className="px-4 py-2 bg-emerald-600 text-white rounded disabled:opacity-50"
+                    >
+                        预览分镜
+                    </button>
+                ) : null}
+
+                {status === 'parsing' ? (
+                    <span className="text-sm text-zinc-400">解析中…</span>
+                ) : null}
+
+                {status === 'preview' ? (
+                    <>
+                        <button
+                            onClick={handleConfirm}
+                            className="px-4 py-2 bg-emerald-600 text-white rounded"
+                        >
+                            生成正式分镜
+                        </button>
+                        <button
+                            onClick={handleParse}
+                            className="px-4 py-2 bg-zinc-700 text-zinc-200 rounded"
+                        >
+                            重新预览
+                        </button>
+                    </>
+                ) : null}
+
+                {status === 'generating' ? (
+                    <span className="text-sm text-zinc-400">
+                        正在生成{progress ? `… ${progress.done}/${progress.total}` : '…'}
+                    </span>
+                ) : null}
+
+                {status === 'done' ? (
+                    <button
+                        onClick={() => onParsed?.(result!)}
+                        className="px-4 py-2 bg-emerald-600 text-white rounded"
+                    >
+                        查看分镜
+                    </button>
+                ) : null}
+
+                {status === 'error' && error ? (
+                    <span className="text-sm text-red-400">错误：{error}</span>
+                ) : null}
+            </div>
 
       {/* 预览面板 */}
       {status === 'preview' && result && (
@@ -200,15 +256,6 @@ export function ScriptInput({ onParsed, onError, chapterId }: ScriptInputProps) 
                   )}
                 </div>
               ))}
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                onClick={handleConfirm}
-                className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition-colors"
-              >
-                确认生成 {result.panels.length} 个分镜
-              </button>
             </div>
           </div>
         </div>
