@@ -8,14 +8,26 @@
 前端可继续调用 chaptersApi.create/saveScript/createStoryboard 进行落库与分镜任务触发。
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 import json
 import logging
 import asyncio
 from typing import Optional
 
+from sqlalchemy.orm import Session
+
 from app.core.config import settings
+from app.core.database import get_db
+from app.api.deps import get_current_user
+from app.models.user import User
+from app.models.project import Project
+from app.schemas.agent_commit import (
+    CommitToStudioRequest,
+    CommitToStudioResponse,
+    CommitCreatedCounts,
+)
+from app.services.agent_commit import commit_agent_to_studio
 from app.services.brain.standard_llm import StandardLLMService
 from app.services.layer_factory.doubao_image_provider import (
     get_doubao_image_provider,
@@ -868,3 +880,50 @@ async def refine_episode(
             affected_panels=[],
             reply=f"抱歉，处理你的请求时出错了：{str(e)}",
         )
+
+
+@router.post(
+    "/projects/{project_id}/commit-to-studio",
+    response_model=CommitToStudioResponse,
+)
+async def commit_to_studio(
+    project_id: str,
+    req: CommitToStudioRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Commit Agent conversation outputs to Studio — creates Chapter + Panels + Assets.
+
+    Accepts either a full payload (frontend has the data) or a lean payload
+    (just {conversation_id, episode_number, [title, summary]}); in the lean case
+    the backend reads ConversationMessage cards to fill in the rest.
+    """
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    owner_id = getattr(project, "owner_id", None)
+    if owner_id and getattr(current_user, "id", None) and owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized for this project")
+
+    try:
+        result = await commit_agent_to_studio(db, project_id, req)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"commit-to-studio failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Commit failed: {e}")
+
+    return CommitToStudioResponse(
+        chapter_id=result.chapter.id,
+        chapter_title=result.chapter.title,
+        status=result.status,
+        created_assets=CommitCreatedCounts(
+            characters=result.character_count,
+            scenes=result.scene_count,
+        ),
+        created_panels=result.panel_count,
+        studio_url=f"/projects/{project_id}/chapters/{result.chapter.id}/studio",
+        warnings=result.warnings,
+        payload_source=result.payload_source,
+    )
