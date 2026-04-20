@@ -495,6 +495,7 @@ class PanelInput(BaseModel):
 
 class GeneratePanelsRequest(BaseModel):
     project_id: Optional[str] = None
+    conversation_id: Optional[str] = None
     art_style: ArtStyle
     characters: list[Character]
     scenes: list[Scene]
@@ -831,6 +832,46 @@ async def generate_panel_images(
             panel_results.append(r)
         else:
             panel_results.append(PanelResult(id=req.panels[i].id, status="failed", error=str(r)))
+
+    # Persist to conversation as `panels` card for later lean-payload commit
+    conversation_id = getattr(req, "conversation_id", None)
+    if conversation_id:
+        try:
+            from app.services.agent_commit.card_writer import upsert_card, build_panels_card
+            from app.core.database import SessionLocal
+
+            result_by_id = {r.id: r for r in panel_results}
+            merged_panels = []
+            for p in req.panels:
+                r = result_by_id.get(p.id)
+                merged_panels.append({
+                    "id": p.id,
+                    "order": getattr(p, "order", None),
+                    "scene_name": p.scene_name,
+                    "characters": p.characters,
+                    "scene_description": p.scene_description,
+                    "dialogue": getattr(p, "dialogue", None),
+                    "shot_type": getattr(p, "shot_type", "MS"),
+                    "camera_angle": getattr(p, "camera_angle", "eye-level"),
+                    "emotion": getattr(p, "emotion", None),
+                    "composition": p.composition,
+                    "image_url": r.image_url if r and r.status == "success" else None,
+                })
+
+            db = SessionLocal()
+            try:
+                success_count = sum(1 for r in panel_results if r.status == "success")
+                upsert_card(
+                    db, conversation_id, "panels",
+                    build_panels_card(merged_panels),
+                    episode_number=episode_number,
+                    content_text=f"[panels card · ep{episode_number} · {success_count}/{len(panel_results)} ready]",
+                )
+                db.commit()
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"Failed to write panels card: {e}")
 
     return GeneratePanelsResponse(panels=panel_results)
 
