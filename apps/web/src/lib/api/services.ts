@@ -272,6 +272,21 @@ export const panelsApi = {
 
     analyze: (chapterId: string, text: string) =>
         apiPost<PanelAnalyzeResponse>('/api/v1/panels/analyze', { chapter_id: chapterId, text }),
+
+    updateBindings: (
+        panelId: string,
+        payload: {
+            slot: 'character' | 'scene' | 'prop'
+            slot_index: number
+            asset_id: string | null
+            asset_version_id?: string | null
+        }
+    ) =>
+        apiPatch<{
+            panel_id: string
+            spec_json: Record<string, unknown>
+            chapter_bindings_updated: boolean
+        }>(`/api/v1/panels/${panelId}/bindings`, payload),
 }
 
 
@@ -343,6 +358,19 @@ export const assetsApi = {
             `/api/v1/assets/${id}/generate-description`,
             {}
         ),
+
+    getUsage: (id: string, limit = 50) =>
+        apiGet<{
+            asset_id: string
+            references: Array<{
+                chapter_id: string
+                chapter_title: string | null
+                panel_id: string
+                panel_order: number
+                panel_preview_url: string | null
+            }>
+            total_count: number
+        }>(`/api/v1/assets/${id}/usage?limit=${limit}`),
 }
 
 // ============ Props API (S5-04) ============
