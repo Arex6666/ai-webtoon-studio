@@ -11,6 +11,7 @@ import type { Asset } from '@/lib/api/types'
 import { BasicTab } from './drawer/BasicTab'
 import { TraitsTab } from './drawer/TraitsTab'
 import { UsageTab } from './drawer/UsageTab'
+import { VersionsTab } from './drawer/VersionsTab'
 
 export interface AssetEditDrawerProps {
     assetId: string | null
@@ -92,8 +93,8 @@ export function AssetEditDrawer({ assetId, onClose, onSaved }: AssetEditDrawerPr
                         <TabsContent value="traits" className="mt-0">
                             {asset && <TraitsTab asset={asset} draft={draft} onChange={setDraft} />}
                         </TabsContent>
-                        <TabsContent value="versions" className="mt-0 text-sm text-muted-foreground">
-                            Versions tab — see Task 19.
+                        <TabsContent value="versions" className="mt-0">
+                            {asset && <VersionsTab assetId={asset.id} />}
                         </TabsContent>
                         <TabsContent value="usage" className="mt-0">
                             {asset && <UsageTab assetId={asset.id} />}
