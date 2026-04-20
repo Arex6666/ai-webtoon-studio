@@ -83,10 +83,13 @@ class TestPatchPanelBindings:
         assert resp.json()["spec_json"]["scene"]["anchor_id"] == seeded["scene_asset_id"]
 
     def test_clear_binding(self, test_client, seeded):
-        test_client.patch(
+        setup = test_client.patch(
             f"/api/v1/panels/{seeded['panel_id']}/bindings",
             json={"slot": "character", "slot_index": 0, "asset_id": seeded["char_asset_id"]},
         )
+        assert setup.status_code == 200, f"setup bind failed: {setup.text}"
+        assert setup.json()["spec_json"]["characters"][0]["asset_id"] == seeded["char_asset_id"]
+
         resp = test_client.patch(
             f"/api/v1/panels/{seeded['panel_id']}/bindings",
             json={"slot": "character", "slot_index": 0, "asset_id": None},
