@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { AssetEditDrawer } from '@/components/assets/AssetEditDrawer'
 
 // 资产类型配置
 const ASSET_TYPES = {
@@ -362,6 +363,7 @@ export default function AssetsPage() {
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedProject, setSelectedProject] = useState<string>('all')
     const [showCreateModal, setShowCreateModal] = useState(false)
+    const [editingAssetId, setEditingAssetId] = useState<string | null>(null)
 
     // 加载项目列表和资产
     const loadData = async () => {
@@ -531,7 +533,7 @@ export default function AssetsPage() {
                             <AssetCard
                                 key={asset.id}
                                 asset={asset}
-                                onEdit={() => {/* TODO: Implement edit modal */ }}
+                                onEdit={() => setEditingAssetId(asset.id)}
                                 onDelete={() => handleDelete(asset.id)}
                                 onRegenerate={() => handleRegenerate(asset.id)}
                             />
@@ -546,6 +548,12 @@ export default function AssetsPage() {
                 onOpenChange={setShowCreateModal}
                 projects={projects}
                 onCreated={loadData}
+            />
+
+            <AssetEditDrawer
+                assetId={editingAssetId}
+                onClose={() => setEditingAssetId(null)}
+                onSaved={() => { loadData() }}
             />
         </div>
     )
