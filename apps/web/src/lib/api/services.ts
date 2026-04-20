@@ -858,3 +858,31 @@ export const conversationsApi = {
     deleteMessage: (messageId: string) =>
         apiDelete<{ success: boolean; message: string }>(`/api/v1/conversations/messages/${messageId}`),
 }
+
+// ============ Agent API ============
+
+export const agentApi = {
+    commitToStudio: (
+        projectId: string,
+        payload: {
+            conversation_id: string
+            episode_number: number
+            episode_title?: string
+            outline_summary?: string
+            art_style?: { base_style?: string; color_tone?: string; atmosphere?: string }
+            characters?: Array<Record<string, unknown>>
+            scenes?: Array<Record<string, unknown>>
+            panels?: Array<Record<string, unknown>>
+        }
+    ) =>
+        apiPost<{
+            chapter_id: string
+            chapter_title: string
+            status: 'created' | 'already_exists'
+            created_assets: { characters: number; scenes: number }
+            created_panels: number
+            studio_url: string
+            warnings: string[]
+            payload_source: 'request' | 'conversation'
+        }>(`/api/v1/agent/projects/${projectId}/commit-to-studio`, payload),
+}
