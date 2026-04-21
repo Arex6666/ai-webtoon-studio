@@ -350,45 +350,79 @@ class ToolHandlers:
 
     async def render_panels(
         self,
-        panel_ids: List[str],
+        panel_ids: Optional[List[str]] = None,
         quality: str = "draft",
         chapter_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        渲染指定的分镜
-        
+        渲染指定的分镜 (Agent 工具: 将每个 panel 作为独立 Celery 任务排队)
+
         Args:
-            panel_ids: 分镜ID列表
+            panel_ids: 分镜ID列表 (可选, 若缺省则渲染整章)
             quality: 质量 (draft, final)
-            chapter_id: 章节ID
-            
+            chapter_id: 章节ID (当 panel_ids 未提供时必填)
+
         Returns:
-            渲染任务信息
+            {success, chapter_id, queued_count, jobs}
         """
+        if not chapter_id and not panel_ids:
+            return {"success": False, "error": "chapter_id or panel_ids required"}
+
         try:
-            logger.info(f"Rendering {len(panel_ids)} panels with quality={quality}")
-            
-            # 启动渲染任务
-            from app.services.auto_storyboard.orchestrator import AutoStoryboardOrchestrator
-            
-            orchestrator = AutoStoryboardOrchestrator(self.db)
-            
-            # 创建渲染作业
-            job_id = f"render_{chapter_id or 'batch'}_{quality}"
-            
-            # TODO: 实际启动渲染
-            # 目前返回模拟结果
+            from app.models.chapter import Chapter
+            from app.api.routes.jobs import create_job_record, JobType
+            from app.workers.image_worker import execute_image_job
+
+            # 加载 panels
+            q = self.db.query(Panel)
+            if panel_ids:
+                q = q.filter(Panel.id.in_(panel_ids))
+            if chapter_id:
+                q = q.filter(Panel.chapter_id == chapter_id)
+            panels = q.all()
+
+            if not panels:
+                return {"success": False, "error": "no panels to render"}
+
+            # 若未显式传入 chapter_id, 从首个 panel 推导
+            resolved_chapter_id = chapter_id or panels[0].chapter_id
+
+            # 校验 chapter 存在 (仅在显式指定时)
+            if chapter_id:
+                chapter = self.db.query(Chapter).filter(Chapter.id == chapter_id).first()
+                if not chapter:
+                    return {"success": False, "error": "chapter not found"}
+
+            queued = []
+            for p in panels:
+                job = create_job_record(
+                    db=self.db,
+                    job_type=JobType.IMAGE.value,
+                    provider="comfyui",
+                    inputs={"quality": quality},
+                    panel_id=p.id,
+                    chapter_id=p.chapter_id,
+                )
+                async_result = execute_image_job.delay(job.id, p.id)
+                queued.append({
+                    "panel_id": p.id,
+                    "job_id": job.id,
+                    "task_id": async_result.id,
+                })
+
+            logger.info(
+                f"render_panels queued {len(queued)} jobs for chapter={resolved_chapter_id} quality={quality}"
+            )
+
             return {
                 "success": True,
-                "job_id": job_id,
-                "panel_count": len(panel_ids),
-                "quality": quality,
-                "status": "queued",
-                "message": f"已开始渲染 {len(panel_ids)} 格分镜",
+                "chapter_id": resolved_chapter_id,
+                "queued_count": len(queued),
+                "jobs": queued,
             }
-            
+
         except Exception as e:
-            logger.error(f"Render panels failed: {e}")
+            logger.error(f"render_panels handler failed: {e}", exc_info=True)
             return {
                 "success": False,
                 "error": str(e),
