@@ -59,6 +59,7 @@ class OutlineResponse(BaseModel):
 
 class Episode1Request(BaseModel):
     outline_text: str
+    conversation_id: Optional[str] = None
 
 
 class Episode1Response(BaseModel):
@@ -413,7 +414,52 @@ async def generate_episode1_script(req: Episode1Request):
         if not episode_title or not script_text:
             raise ValueError("Invalid LLM output: missing episodeTitle/scriptText")
 
-        return Episode1Response(episodeTitle=episode_title, scriptText=script_text)
+        result = Episode1Response(episodeTitle=episode_title, scriptText=script_text)
+
+        # Persist script outputs as conversation cards for later lean-payload commit
+        try:
+            from app.services.agent_commit.card_writer import (
+                upsert_card, build_characters_card, build_scenes_card, build_art_style_card
+            )
+            from app.core.database import SessionLocal
+
+            cid = getattr(req, "conversation_id", None)
+            if cid:
+                db = SessionLocal()
+                try:
+                    if hasattr(result, "characters") and result.characters:
+                        upsert_card(
+                            db, cid, "characters",
+                            build_characters_card([
+                                c.model_dump() if hasattr(c, "model_dump") else (c if isinstance(c, dict) else {})
+                                for c in result.characters
+                            ]),
+                        )
+                    if hasattr(result, "scenes") and result.scenes:
+                        upsert_card(
+                            db, cid, "scenes",
+                            build_scenes_card([
+                                s.model_dump() if hasattr(s, "model_dump") else (s if isinstance(s, dict) else {})
+                                for s in result.scenes
+                            ]),
+                        )
+                    if hasattr(result, "art_style") and result.art_style:
+                        art = result.art_style
+                        upsert_card(
+                            db, cid, "art_style",
+                            build_art_style_card(
+                                base_style=getattr(art, "base_style", "") or (art.get("base_style", "") if isinstance(art, dict) else ""),
+                                color_tone=getattr(art, "color_tone", "") or (art.get("color_tone", "") if isinstance(art, dict) else ""),
+                                atmosphere=getattr(art, "atmosphere", "") or (art.get("atmosphere", "") if isinstance(art, dict) else ""),
+                            ),
+                        )
+                    db.commit()
+                finally:
+                    db.close()
+        except Exception as e:
+            logger.warning(f"Failed to write script cards: {e}")
+
+        return result
 
     except HTTPException:
         raise
@@ -431,6 +477,7 @@ class EpisodeScriptRequest(BaseModel):
     episode_number: int
     outline_text: str
     conversation_context: list[dict] | None = None  # 可选的对话上下文
+    conversation_id: Optional[str] = None
 
 
 class StoryboardPanel(BaseModel):
@@ -723,7 +770,7 @@ async def generate_full_episode_script(
         else:
             logger.info(f"[Episode {episode_number}] DoubaoImageProvider not available, skipping image generation")
 
-        return EpisodeScriptResponse(
+        result = EpisodeScriptResponse(
             episode_number=episode_number,
             episode_title=episode_title,
             story_summary=story_summary,
@@ -733,6 +780,51 @@ async def generate_full_episode_script(
             scenes=scenes,
             panels=panels
         )
+
+        # Persist script outputs as conversation cards for later lean-payload commit
+        try:
+            from app.services.agent_commit.card_writer import (
+                upsert_card, build_characters_card, build_scenes_card, build_art_style_card
+            )
+            from app.core.database import SessionLocal
+
+            cid = getattr(req, "conversation_id", None)
+            if cid:
+                db = SessionLocal()
+                try:
+                    if hasattr(result, "characters") and result.characters:
+                        upsert_card(
+                            db, cid, "characters",
+                            build_characters_card([
+                                c.model_dump() if hasattr(c, "model_dump") else (c if isinstance(c, dict) else {})
+                                for c in result.characters
+                            ]),
+                        )
+                    if hasattr(result, "scenes") and result.scenes:
+                        upsert_card(
+                            db, cid, "scenes",
+                            build_scenes_card([
+                                s.model_dump() if hasattr(s, "model_dump") else (s if isinstance(s, dict) else {})
+                                for s in result.scenes
+                            ]),
+                        )
+                    if hasattr(result, "art_style") and result.art_style:
+                        art = result.art_style
+                        upsert_card(
+                            db, cid, "art_style",
+                            build_art_style_card(
+                                base_style=getattr(art, "base_style", "") or (art.get("base_style", "") if isinstance(art, dict) else ""),
+                                color_tone=getattr(art, "color_tone", "") or (art.get("color_tone", "") if isinstance(art, dict) else ""),
+                                atmosphere=getattr(art, "atmosphere", "") or (art.get("atmosphere", "") if isinstance(art, dict) else ""),
+                            ),
+                        )
+                    db.commit()
+                finally:
+                    db.close()
+        except Exception as e:
+            logger.warning(f"Failed to write script cards: {e}")
+
+        return result
 
     except HTTPException:
         raise
