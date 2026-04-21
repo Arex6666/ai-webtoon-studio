@@ -484,7 +484,7 @@ class ToolHandlers:
         """
         try:
             logger.info(f"Analyzing quality for panel {panel_id}")
-            
+
             # 获取分镜
             panel = self.db.query(Panel).filter(Panel.id == panel_id).first()
             if not panel:
@@ -492,24 +492,53 @@ class ToolHandlers:
                     "success": False,
                     "error": f"分镜 {panel_id} 不存在",
                 }
-            
-            # 调用QA服务
-            # TODO: 实际QA分析
+
+            # 优先使用排版后图片, 否则使用渲染预览图
+            image_url = panel.typeset_image_url or panel.preview_url
+            if not image_url:
+                return {
+                    "success": False,
+                    "error": f"分镜 {panel_id} 尚未生成图片, 无法执行 QA",
+                }
+
+            # 调用 ImageQAService 执行真实质量检测
+            from app.services.qa.image_qa import ImageQAService
+
+            qa_service = ImageQAService()
+            report = await qa_service.analyze(image_url)
+            report_dict = report.to_dict()
+
             analysis = {
                 "panel_id": panel_id,
-                "overall_score": 0.8,
-                "issues": [],
+                "overall_score": report_dict["score"],
+                "passed": report_dict["passed"],
+                "issues": report_dict["issues"],
+                "checks_performed": report_dict["checks_performed"],
                 "suggestions": [],
             }
-            
+
+            # 同步写入 Panel 的 QA 统计字段
+            try:
+                panel.qa_score = float(report_dict["score"])
+                panel.warning_count = sum(
+                    1 for i in report_dict["issues"] if i.get("level") == "warning"
+                )
+                panel.error_count = sum(
+                    1 for i in report_dict["issues"] if i.get("level") == "error"
+                )
+                self.db.commit()
+            except Exception as persist_err:
+                logger.warning(f"Persist QA result failed: {persist_err}")
+                self.db.rollback()
+
             return {
                 "success": True,
                 "analysis": analysis,
                 "message": f"分镜质量评分: {analysis['overall_score']:.0%}",
             }
-            
+
         except Exception as e:
-            logger.error(f"Quality analysis failed: {e}")
+            logger.error(f"Quality analysis failed: {e}", exc_info=True)
             return {
                 "success": False,
                 "error": str(e),
