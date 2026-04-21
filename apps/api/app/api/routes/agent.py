@@ -9,8 +9,10 @@
 """
 
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import json
+import json as _json_sse  # alias to avoid clash with other json imports in SSE helper
 import logging
 import asyncio
 from typing import Optional
@@ -1089,4 +1091,92 @@ async def commit_to_studio(
         studio_url=f"/projects/{project_id}/chapters/{result.chapter.id}/studio",
         warnings=result.warnings,
         payload_source=result.payload_source,
+    )
+
+
+# ---------------------------------------------------------------------------
+# SSE streaming variant of /episode/{N}/script
+# ---------------------------------------------------------------------------
+
+
+def _sse(event: str, data) -> str:
+    """Format a Server-Sent Event frame."""
+    return f"event: {event}\ndata: {_json_sse.dumps(data, ensure_ascii=False, default=str)}\n\n"
+
+
+def _safe_model_dump(obj):
+    """Best-effort conversion of a Pydantic model (or dict) to a JSON-serializable dict."""
+    if hasattr(obj, "model_dump"):
+        try:
+            return obj.model_dump(mode="json")
+        except Exception:
+            return obj.model_dump()
+    if isinstance(obj, dict):
+        return obj
+    return str(obj)
+
+
+async def _generate_episode_script_core(
+    episode_number: int, req: EpisodeScriptRequest,
+):
+    """Call the core endpoint function directly to reuse logic.
+
+    ``generate_full_episode_script`` is ``@router.post``-decorated but is also a
+    normal async function that can be invoked directly — FastAPI does not wrap
+    the function body when calling as a plain coroutine (only when dispatched
+    via HTTP does the request/response handling kick in).
+    """
+    return await generate_full_episode_script(episode_number, req)
+
+
+@router.post("/episode/{episode_number}/script/stream")
+async def generate_full_episode_script_stream(
+    episode_number: int,
+    req: EpisodeScriptRequest,
+):
+    """SSE streaming variant of /episode/{N}/script.
+
+    Emits events:
+      progress  {"phase": "analyzing|writing|finalizing", "pct": 0-100}
+      done      {...full EpisodeScriptResponse json...}
+      error     {"message": "..."}
+    """
+    async def event_generator():
+        try:
+            yield _sse("progress", {"phase": "analyzing", "pct": 5})
+
+            loop = asyncio.get_event_loop()
+            result_future = loop.create_task(
+                _generate_episode_script_core(episode_number, req)
+            )
+
+            pct = 5
+            while not result_future.done():
+                await asyncio.sleep(1.0)
+                pct = min(pct + 2, 90)
+                yield _sse("progress", {"phase": "writing", "pct": pct})
+
+            try:
+                result = await result_future
+            except Exception as e:
+                logger.error(f"SSE script generation failed: {e}", exc_info=True)
+                yield _sse("error", {"message": str(e)})
+                return
+
+            yield _sse("progress", {"phase": "finalizing", "pct": 95})
+
+            # Card writing is already done inside the core endpoint; no need to duplicate.
+            yield _sse("done", _safe_model_dump(result))
+        except Exception as e:
+            logger.error(f"SSE error: {e}", exc_info=True)
+            yield _sse("error", {"message": str(e)})
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
