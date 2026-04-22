@@ -6,6 +6,7 @@ import { Loader2, ArrowLeft, Sparkles, FileText, Film, Play } from 'lucide-react
 import Link from 'next/link'
 
 import { AgentChat, AgentMessage } from '@/components/agent/AgentChat'
+import { PhaseErrorBanner } from '@/components/agent/PhaseErrorBanner'
 import { VideoCard, VideoCardData, PanelImage, PanelMeta } from '@/components/agent/VideoCard'
 import { conversationsApi, api } from '@/lib/api'
 import { agentApi } from '@/lib/api/services'
@@ -853,22 +854,44 @@ export default function EpisodeConversationPage() {
                 </div>
             )}
 
-            {generationError && !isTyping && (
-                <div className="flex items-center justify-center gap-3 px-6 py-3 border-t border-red-900/30 bg-red-950/20">
-                    <span className="text-xs text-red-400">生成失败</span>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs border-emerald-700 text-emerald-400 hover:bg-emerald-900/30"
-                        onClick={() => {
+            {streamError && !isTyping && (phase === 'script' || phase === 'loading') && (
+                <div className="px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/60">
+                    <PhaseErrorBanner
+                        phase="剧本"
+                        message={streamError}
+                        onRetry={() => {
                             setGenerationError(null)
-                            if (phase === 'script' || phase === 'loading') handleGenerateScript()
-                            else if (phase === 'panels') handleConfirmAssets()
+                            handleGenerateScript()
                         }}
-                    >
-                        <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                        重试
-                    </Button>
+                    />
+                </div>
+            )}
+
+            {generationError && !isTyping && phase === 'panels' && (
+                <div className="px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/60">
+                    <PhaseErrorBanner
+                        phase="分镜生成"
+                        message={generationError}
+                        onRetry={() => {
+                            setGenerationError(null)
+                            handleConfirmAssets()
+                        }}
+                        onSkip={() => setGenerationError(null)}
+                    />
+                </div>
+            )}
+
+            {generationError && !isTyping && phase !== 'panels' && phase !== 'script' && phase !== 'loading' && (
+                <div className="px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/60">
+                    <PhaseErrorBanner
+                        phase="生成"
+                        message={generationError}
+                        onRetry={() => {
+                            setGenerationError(null)
+                            if (phase === 'confirm') handleConfirmAssets()
+                        }}
+                        onSkip={() => setGenerationError(null)}
+                    />
                 </div>
             )}
         </div>
