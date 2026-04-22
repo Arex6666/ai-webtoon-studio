@@ -7,13 +7,13 @@ import Link from 'next/link'
 
 import { AgentChat, AgentMessage } from '@/components/agent/AgentChat'
 import { VideoCard, VideoCardData, PanelImage, PanelMeta } from '@/components/agent/VideoCard'
-import { conversationsApi } from '@/lib/api'
+import { conversationsApi, api } from '@/lib/api'
 import { agentApi } from '@/lib/api/services'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
+import { useScriptStream } from '@/hooks/useScriptStream'
 import {
     EpisodeScriptData,
-    generateEpisodeScript,
     generatePanelImages,
     refineEpisode,
 } from '@/lib/api/episodeApi'
@@ -47,6 +47,16 @@ export default function EpisodeConversationPage() {
     // Open-in-Studio state
     const { toast } = useToast()
     const [committing, setCommitting] = useState(false)
+
+    // SSE script stream
+    const {
+        status: streamStatus,
+        phase: streamPhase,
+        pct: streamPct,
+        data: streamData,
+        error: streamError,
+        start: startStream,
+    } = useScriptStream(api.baseUrl)
 
     const handleOpenInStudio = useCallback(async () => {
         if (!conversationId) {
@@ -229,7 +239,7 @@ export default function EpisodeConversationPage() {
         }
     }, [isLoading, conversationId, outlineContext, phase])
 
-    // ─── Phase 1: Generate script + character/scene images ───
+    // ─── Phase 1: Generate script + character/scene images (SSE) ───
     const handleGenerateScript = async () => {
         setGenerationError(null)
         setPhase('script')
@@ -245,8 +255,17 @@ export default function EpisodeConversationPage() {
 
         setIsTyping(true)
 
-        try {
-            const data = await generateEpisodeScript(projectId, episodeNum, outlineContext)
+        await startStream(episodeNum, {
+            project_id: projectId,
+            episode_number: episodeNum,
+            outline_text: outlineContext,
+        })
+    }
+
+    // ─── React to SSE done/error events ───
+    useEffect(() => {
+        if (streamStatus === 'done' && streamData && streamData.panels) {
+            const data = streamData as EpisodeScriptData
             setScriptData(data)
 
             const scriptContent = formatScriptAsMarkdown(data)
@@ -256,34 +275,31 @@ export default function EpisodeConversationPage() {
                 content: scriptContent,
                 timestamp: Date.now(),
             }
-            setMessages(prev => [...prev, scriptMsg])
+            setMessages(prev => [...prev.filter(m => m.id !== 'script'), scriptMsg])
             setPhase('confirm')
+            setIsTyping(false)
 
             // Persist pipeline state
-            await saveMessage('assistant', scriptContent, {
+            saveMessage('assistant', scriptContent, {
                 type: 'episode_pipeline',
                 phase: 'confirm',
                 script_data: data,
-            })
-        } catch (e: any) {
-            console.error(`[Episode ${episodeNum}] Script generation failed:`, e)
-            const isTimeout = e.name === 'AbortError'
-            const errorText = isTimeout ? 'LLM 请求超时（超过3分钟）' : (e.message || '网络错误')
+            }).catch(err => console.error('Failed to persist script:', err))
+        } else if (streamStatus === 'error') {
+            const errorText = streamError || '网络错误'
             setGenerationError(errorText)
+            setIsTyping(false)
 
             const errorMsg: AgentMessage = {
                 id: 'error-' + Date.now(),
                 role: 'assistant',
-                content: isTimeout
-                    ? `剧本生成超时，LLM 处理时间超过了3分钟。\n\n请点击下方按钮重试。`
-                    : `剧本生成失败：**${errorText}**\n\n请检查后端配置后点击下方按钮重试。`,
+                content: `剧本生成失败：**${errorText}**\n\n请检查后端配置后点击下方按钮重试。`,
                 timestamp: Date.now(),
             }
             setMessages(prev => [...prev, errorMsg])
-        } finally {
-            setIsTyping(false)
         }
-    }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [streamStatus, streamData, streamError])
 
     // ─── Phase 2→3: Confirm assets and generate panel first frames ───
     const handleConfirmAssets = async () => {
@@ -791,6 +807,28 @@ export default function EpisodeConversationPage() {
                         <Sparkles className="h-4 w-4 mr-2" />
                         确认角色与场景，开始生成分镜首帧
                     </Button>
+                </div>
+            )}
+
+            {streamStatus === 'streaming' && phase === 'script' && (
+                <div className="px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/80">
+                    <div className="space-y-2 max-w-2xl mx-auto">
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-zinc-300 flex items-center gap-2">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+                                {streamPhase === 'analyzing' ? '分析剧情...' :
+                                 streamPhase === 'writing' ? '生成剧本...' :
+                                 streamPhase === 'finalizing' ? '整理结果...' : '准备中...'}
+                            </span>
+                            <span className="text-zinc-500">{streamPct}%</span>
+                        </div>
+                        <div className="h-1.5 rounded bg-zinc-800 overflow-hidden">
+                            <div
+                                className="h-full bg-emerald-500 transition-all"
+                                style={{ width: `${streamPct}%` }}
+                            />
+                        </div>
+                    </div>
                 </div>
             )}
 
