@@ -13,7 +13,9 @@ import { VideoCard, VideoCardData, PanelImage, PanelMeta } from '@/components/ag
 import { conversationsApi, api } from '@/lib/api'
 import { agentApi, type Conversation } from '@/lib/api/services'
 import { Button } from '@/components/ui/button'
+import { ToastAction } from '@/components/ui/toast'
 import { useToast } from '@/hooks/use-toast'
+import { CommitWarningsDialog } from '@/components/commit/CommitWarningsDialog'
 import { useEpisodeTreeData } from '@/hooks/useEpisodeTreeData'
 import { useScriptStream } from '@/hooks/useScriptStream'
 import {
@@ -61,6 +63,8 @@ export default function EpisodeConversationPage() {
     // Open-in-Studio state
     const { toast } = useToast()
     const [committing, setCommitting] = useState(false)
+    const [showWarnings, setShowWarnings] = useState(false)
+    const [lastWarnings, setLastWarnings] = useState<string[]>([])
 
     // SSE script stream
     const {
@@ -128,9 +132,20 @@ export default function EpisodeConversationPage() {
                     description: `${result.created_panels} 分镜 · ${result.created_assets.characters} 角色 · ${result.created_assets.scenes} 场景`,
                 })
                 if (result.warnings.length > 0) {
+                    setLastWarnings(result.warnings)
+                    const preview = result.warnings.slice(0, 2).join(' · ')
+                    const more = result.warnings.length > 2 ? ' · ...' : ''
                     toast({
-                        title: '部分图片未能保存',
-                        description: `${result.warnings.length} 条警告，可在 Studio 手动上传`,
+                        title: `${result.warnings.length} 条警告`,
+                        description: preview + more,
+                        action: (
+                            <ToastAction
+                                altText="查看全部警告"
+                                onClick={() => setShowWarnings(true)}
+                            >
+                                查看全部
+                            </ToastAction>
+                        ),
                     })
                 }
             }
@@ -1116,6 +1131,12 @@ export default function EpisodeConversationPage() {
                     </div>
                 )}
             </div>
+
+            <CommitWarningsDialog
+                open={showWarnings}
+                onOpenChange={setShowWarnings}
+                warnings={lastWarnings}
+            />
         </div>
     )
 }
