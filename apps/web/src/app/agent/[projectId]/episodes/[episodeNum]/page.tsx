@@ -146,6 +146,36 @@ export default function EpisodeConversationPage() {
         }
     }, [conversationId, episodeNum, scriptData, panelImages, projectId, router, toast])
 
+    // ─── Delete / regenerate message callbacks ───
+    const handleDeleteMessage = useCallback(async (messageId: string) => {
+        if (!conversationId) return
+        try {
+            await conversationsApi.deleteMessage(messageId)
+            setMessages(prev => prev.filter(m => m.id !== messageId))
+            toast({ title: '消息已删除' })
+        } catch (err) {
+            toast({
+                title: '删除失败',
+                description: err instanceof Error ? err.message : String(err),
+                variant: 'destructive',
+            })
+        }
+    }, [conversationId, toast])
+
+    const handleRegenerateMessage = useCallback((_messageId: string) => {
+        // For the episode flow, regenerate maps to phase-level retry.
+        if (phase === 'script' || phase === 'confirm' || phase === 'loading') {
+            setGenerationError(null)
+            handleGenerateScript()
+        } else if (phase === 'panels') {
+            setGenerationError(null)
+            handleConfirmAssets()
+        } else {
+            toast({ title: '当前阶段不支持重新生成' })
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [phase, toast])
+
     // ─── EpisodeTree callbacks ───
     const handleSelectEpisode = useCallback((id: string) => {
         const ep = episodes.find(e => e.id === id)
@@ -939,6 +969,8 @@ export default function EpisodeConversationPage() {
                         onSendMessage={handleSendMessage}
                         onCardAction={() => {}}
                         isTyping={isTyping}
+                        onDeleteMessage={handleDeleteMessage}
+                        onRegenerateMessage={handleRegenerateMessage}
                     />
                 </div>
 

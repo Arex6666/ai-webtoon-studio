@@ -4,10 +4,16 @@ import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
     Bot, User, Send, Sparkles, FileText, Image as ImageIcon,
-    Layers, Eye, Check, RotateCcw, ExternalLink, Loader2, AtSign, Trash2, ArrowRight, Film
+    Layers, Eye, Check, RotateCcw, ExternalLink, Loader2, AtSign, Trash2, MoreHorizontal, ArrowRight, Film
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MarkdownContent } from '@/components/ui/MarkdownContent'
+import {
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem,
+} from '@/components/ui/dropdown-menu'
 
 export type CardType = 'outline' | 'script' | 'storyboard' | 'asset' | 'video' | 'episode_pipeline'
 export type MessageRole = 'user' | 'assistant' | 'system'
@@ -47,6 +53,7 @@ interface AgentChatProps {
     onSendMessage: (content: string) => void
     onCardAction: (cardId: string, actionId: string) => void
     onDeleteMessage?: (messageId: string) => void
+    onRegenerateMessage?: (messageId: string) => void
     isTyping?: boolean
     // 新增：显示「进入分集」按钮
     showEpisodesButton?: boolean
@@ -134,7 +141,7 @@ function ActionCardComponent({ card, onAction }: { card: ActionCard; onAction: (
     )
 }
 
-export function AgentChat({ messages, onSendMessage, onCardAction, onDeleteMessage, isTyping, showEpisodesButton, onGoToEpisodes }: AgentChatProps) {
+export function AgentChat({ messages, onSendMessage, onCardAction, onDeleteMessage, onRegenerateMessage, isTyping, showEpisodesButton, onGoToEpisodes }: AgentChatProps) {
     const [input, setInput] = useState('')
     const [showMentions, setShowMentions] = useState(false)
     const [inputHovered, setInputHovered] = useState(false)
@@ -268,22 +275,46 @@ export function AgentChat({ messages, onSendMessage, onCardAction, onDeleteMessa
                                 {msg.customContent}
                             </div>
 
-                            {/* Delete button - shown on hover */}
-                            {onDeleteMessage && (
-                                <motion.button
-                                    initial={{ opacity: 0, scale: 0.8 }}
-                                    whileHover={{ scale: 1.1 }}
-                                    whileTap={{ scale: 0.9 }}
-                                    onClick={() => onDeleteMessage(msg.id)}
-                                    className={cn(
-                                        "absolute top-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200",
-                                        "p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300",
-                                        msg.role === 'user' ? "left-0" : "right-0"
-                                    )}
-                                    title="删除此消息"
-                                >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                </motion.button>
+                            {/* Kebab menu - shown on hover */}
+                            {(onDeleteMessage || onRegenerateMessage) && (
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <button
+                                            className={cn(
+                                                "absolute top-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200",
+                                                "p-1.5 rounded-lg bg-[#18181B] hover:bg-[#27272A] text-[#71717A] hover:text-[#FAFAFA]",
+                                                "border border-[#27272A]",
+                                                msg.role === 'user' ? "left-0" : "right-0"
+                                            )}
+                                            aria-label="消息操作"
+                                        >
+                                            <MoreHorizontal className="w-3.5 h-3.5" />
+                                        </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                        align={msg.role === 'user' ? 'start' : 'end'}
+                                        className="bg-[#18181B] border-[#27272A] text-[#FAFAFA]"
+                                    >
+                                        {onRegenerateMessage && msg.role === 'assistant' && (
+                                            <DropdownMenuItem
+                                                onClick={() => onRegenerateMessage(msg.id)}
+                                                className="cursor-pointer focus:bg-[#27272A] focus:text-[#FAFAFA]"
+                                            >
+                                                <RotateCcw className="w-3.5 h-3.5 mr-2" />
+                                                重新生成
+                                            </DropdownMenuItem>
+                                        )}
+                                        {onDeleteMessage && (
+                                            <DropdownMenuItem
+                                                onClick={() => onDeleteMessage(msg.id)}
+                                                className="cursor-pointer text-red-400 focus:bg-red-500/10 focus:text-red-300"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5 mr-2" />
+                                                删除
+                                            </DropdownMenuItem>
+                                        )}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                             )}
                         </motion.div>
                     ))}
