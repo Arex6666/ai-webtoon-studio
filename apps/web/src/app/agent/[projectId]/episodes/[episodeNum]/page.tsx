@@ -1,17 +1,19 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { Loader2, ArrowLeft, Sparkles, FileText, Film, Play } from 'lucide-react'
 import Link from 'next/link'
 
 import { AgentChat, AgentMessage } from '@/components/agent/AgentChat'
+import { EpisodeTree } from '@/components/agent/EpisodeTree'
 import { PhaseErrorBanner } from '@/components/agent/PhaseErrorBanner'
 import { VideoCard, VideoCardData, PanelImage, PanelMeta } from '@/components/agent/VideoCard'
 import { conversationsApi, api } from '@/lib/api'
 import { agentApi } from '@/lib/api/services'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
+import { useEpisodeTreeData } from '@/hooks/useEpisodeTreeData'
 import { useScriptStream } from '@/hooks/useScriptStream'
 import {
     EpisodeScriptData,
@@ -24,8 +26,18 @@ type EpisodePhase = 'loading' | 'script' | 'confirm' | 'panels' | 'video' | 'don
 export default function EpisodeConversationPage() {
     const params = useParams()
     const router = useRouter()
+    const searchParams = useSearchParams()
     const projectId = params.projectId as string
     const episodeNum = parseInt(params.episodeNum as string)
+
+    // Episode tree data (left sidebar)
+    const { episodes } = useEpisodeTreeData(projectId)
+    const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null)
+
+    const currentEpisodeId = useMemo(
+        () => episodes.find(e => e.number === episodeNum)?.id ?? null,
+        [episodes, episodeNum]
+    )
 
     // Core state
     const [messages, setMessages] = useState<AgentMessage[]>([])
@@ -132,6 +144,48 @@ export default function EpisodeConversationPage() {
             setCommitting(false)
         }
     }, [conversationId, episodeNum, scriptData, panelImages, projectId, router, toast])
+
+    // ─── EpisodeTree callbacks ───
+    const handleSelectEpisode = useCallback((id: string) => {
+        const ep = episodes.find(e => e.id === id)
+        if (!ep) return
+        if (ep.number === episodeNum) return
+        router.push(`/agent/${projectId}/episodes/${ep.number}`)
+    }, [episodes, episodeNum, projectId, router])
+
+    const handleSelectPhase = useCallback((episodeId: string, phaseId: string) => {
+        setSelectedPhaseId(phaseId)
+        if (episodeId !== currentEpisodeId) {
+            const ep = episodes.find(e => e.id === episodeId)
+            if (ep) {
+                router.push(`/agent/${projectId}/episodes/${ep.number}?phase=${phaseId}`)
+            }
+            return
+        }
+        document.getElementById(`phase-${phaseId}`)?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+        })
+    }, [episodes, currentEpisodeId, projectId, router])
+
+    const handleAddEpisode = useCallback(() => {
+        const maxNum = Math.max(0, ...episodes.map(e => e.number))
+        router.push(`/agent/${projectId}/episodes/${maxNum + 1}`)
+    }, [episodes, projectId, router])
+
+    // ─── React to ?phase= query param for cross-page scroll ───
+    useEffect(() => {
+        const phaseParam = searchParams?.get('phase')
+        if (!phaseParam) return
+        setSelectedPhaseId(phaseParam)
+        const timer = setTimeout(() => {
+            document.getElementById(`phase-${phaseParam}`)?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start',
+            })
+        }, 100)
+        return () => clearTimeout(timer)
+    }, [searchParams, scriptData])
 
     // ─── Load conversation history and context ───
     useEffect(() => {
@@ -734,166 +788,194 @@ export default function EpisodeConversationPage() {
     }
 
     return (
-        <div className="flex-1 h-full bg-[#000000] flex flex-col overflow-hidden relative">
-            {/* Header */}
-            <div className="absolute top-0 left-0 right-0 z-30 flex items-center gap-4 px-6 py-4 border-b border-zinc-800/50 bg-[#000000]/90 backdrop-blur-md opacity-0 hover:opacity-100 transition-opacity duration-300">
-                <Link
-                    href={`/agent/${projectId}/episodes`}
-                    className="p-2 rounded-lg hover:bg-zinc-800 transition-colors"
-                >
-                    <ArrowLeft className="h-5 w-5 text-zinc-400" />
-                </Link>
-                <div>
-                    <h1 className="text-lg font-semibold text-white">第{episodeNum}集</h1>
-                    <p className="text-xs text-zinc-500">
-                        {phase === 'script' && '正在生成剧本...'}
-                        {phase === 'confirm' && '等待确认角色与场景'}
-                        {phase === 'panels' && '正在生成分镜首帧'}
-                        {phase === 'video' && '视频生成'}
-                        {phase === 'done' && '全部完成'}
-                    </p>
-                </div>
-                <div className="ml-auto flex items-center gap-2">
-                    {scriptData && (
-                        <Button
-                            onClick={handleOpenInStudio}
-                            disabled={committing || (scriptData.panels?.length ?? 0) === 0}
-                            size="sm"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
-                            title={
-                                (scriptData.panels?.length ?? 0) === 0
-                                    ? '暂无分镜，无法打开 Studio'
-                                    : '将本集的剧本、角色、场景、分镜提交到 Studio'
-                            }
-                        >
-                            {committing ? (
-                                <>
-                                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                                    提交中…
-                                </>
-                            ) : (
-                                <>
-                                    <Play className="h-3.5 w-3.5 mr-1.5" />
-                                    在 Studio 打开
-                                </>
-                            )}
-                        </Button>
-                    )}
-                    {(phase === 'video' || phase === 'done') && (
-                        <Button variant="outline" size="sm" className="text-xs">
-                            <FileText className="h-3.5 w-3.5 mr-1.5" />
-                            导出剧本
-                        </Button>
-                    )}
-                </div>
-            </div>
-
-            {/* Chat */}
-            <div className="flex-1 overflow-hidden">
-                <AgentChat
-                    messages={messages}
-                    onSendMessage={handleSendMessage}
-                    onCardAction={() => {}}
-                    isTyping={isTyping}
+        <div className="flex-1 h-full bg-[#000000] flex overflow-hidden">
+            {/* Episode Tree Sidebar */}
+            <div className="w-[280px] shrink-0 h-full">
+                <EpisodeTree
+                    episodes={episodes}
+                    selectedEpisode={currentEpisodeId}
+                    selectedPhase={selectedPhaseId}
+                    onSelectEpisode={handleSelectEpisode}
+                    onSelectPhase={handleSelectPhase}
+                    onAddEpisode={handleAddEpisode}
                 />
             </div>
 
-            {/* Phase Action Bar */}
-            {phase === 'confirm' && !isTyping && (
-                <div className="flex items-center justify-center gap-3 px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/80">
-                    <Button
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm"
-                        onClick={handleConfirmAssets}
-                    >
-                        <Sparkles className="h-4 w-4 mr-2" />
-                        确认角色与场景，开始生成分镜首帧
-                    </Button>
-                </div>
-            )}
+            {/* Right Column */}
+            <div className="flex-1 flex flex-col overflow-hidden relative">
+                {/* Phase anchor: script (top of page / stream progress region) */}
+                <div id="phase-script" className="scroll-mt-20" />
 
-            {streamStatus === 'streaming' && phase === 'script' && (
-                <div className="px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/80">
-                    <div className="space-y-2 max-w-2xl mx-auto">
-                        <div className="flex items-center justify-between text-sm">
-                            <span className="text-zinc-300 flex items-center gap-2">
-                                <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
-                                {streamPhase === 'analyzing' ? '分析剧情...' :
-                                 streamPhase === 'writing' ? '生成剧本...' :
-                                 streamPhase === 'finalizing' ? '整理结果...' : '准备中...'}
-                            </span>
-                            <span className="text-zinc-500">{streamPct}%</span>
-                        </div>
-                        <div className="h-1.5 rounded bg-zinc-800 overflow-hidden">
-                            <div
-                                className="h-full bg-emerald-500 transition-all"
-                                style={{ width: `${streamPct}%` }}
-                            />
-                        </div>
+                {/* Header */}
+                <div className="absolute top-0 left-0 right-0 z-30 flex items-center gap-4 px-6 py-4 border-b border-zinc-800/50 bg-[#000000]/90 backdrop-blur-md opacity-0 hover:opacity-100 transition-opacity duration-300">
+                    <Link
+                        href={`/agent/${projectId}/episodes`}
+                        className="p-2 rounded-lg hover:bg-zinc-800 transition-colors"
+                    >
+                        <ArrowLeft className="h-5 w-5 text-zinc-400" />
+                    </Link>
+                    <div>
+                        <h1 className="text-lg font-semibold text-white">第{episodeNum}集</h1>
+                        <p className="text-xs text-zinc-500">
+                            {phase === 'script' && '正在生成剧本...'}
+                            {phase === 'confirm' && '等待确认角色与场景'}
+                            {phase === 'panels' && '正在生成分镜首帧'}
+                            {phase === 'video' && '视频生成'}
+                            {phase === 'done' && '全部完成'}
+                        </p>
+                    </div>
+                    <div className="ml-auto flex items-center gap-2">
+                        {/* Phase anchor: export (next to the 导出剧本 button) */}
+                        <div id="phase-export" className="scroll-mt-20" />
+                        {scriptData && (
+                            <Button
+                                onClick={handleOpenInStudio}
+                                disabled={committing || (scriptData.panels?.length ?? 0) === 0}
+                                size="sm"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                                title={
+                                    (scriptData.panels?.length ?? 0) === 0
+                                        ? '暂无分镜，无法打开 Studio'
+                                        : '将本集的剧本、角色、场景、分镜提交到 Studio'
+                                }
+                            >
+                                {committing ? (
+                                    <>
+                                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                                        提交中…
+                                    </>
+                                ) : (
+                                    <>
+                                        <Play className="h-3.5 w-3.5 mr-1.5" />
+                                        在 Studio 打开
+                                    </>
+                                )}
+                            </Button>
+                        )}
+                        {(phase === 'video' || phase === 'done') && (
+                            <Button variant="outline" size="sm" className="text-xs">
+                                <FileText className="h-3.5 w-3.5 mr-1.5" />
+                                导出剧本
+                            </Button>
+                        )}
                     </div>
                 </div>
-            )}
 
-            {phase === 'panels' && panelProgress && (
-                <div className="flex items-center justify-center gap-3 px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/80">
-                    <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
-                    <span className="text-sm text-zinc-400">
-                        正在生成分镜首帧 ({panelProgress.done}/{panelProgress.total})
-                    </span>
-                </div>
-            )}
-
-            {(phase === 'video') && !isTyping && !panelProgress && Object.keys(panelImages).length > 0 && (
-                <div className="flex items-center justify-center gap-3 px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/80">
-                    <Button
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm"
-                        onClick={handleStartVideoGeneration}
-                    >
-                        <Film className="h-4 w-4 mr-2" />
-                        生成全部视频
-                    </Button>
-                </div>
-            )}
-
-            {streamError && !isTyping && (phase === 'script' || phase === 'loading') && (
-                <div className="px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/60">
-                    <PhaseErrorBanner
-                        phase="剧本"
-                        message={streamError}
-                        onRetry={() => {
-                            setGenerationError(null)
-                            handleGenerateScript()
-                        }}
+                {/* Chat */}
+                <div className="flex-1 overflow-hidden">
+                    <AgentChat
+                        messages={messages}
+                        onSendMessage={handleSendMessage}
+                        onCardAction={() => {}}
+                        isTyping={isTyping}
                     />
                 </div>
-            )}
 
-            {generationError && !isTyping && phase === 'panels' && (
-                <div className="px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/60">
-                    <PhaseErrorBanner
-                        phase="分镜生成"
-                        message={generationError}
-                        onRetry={() => {
-                            setGenerationError(null)
-                            handleConfirmAssets()
-                        }}
-                        onSkip={() => setGenerationError(null)}
-                    />
-                </div>
-            )}
+                {/* Phase anchors: storyboard + assets (mapped to confirm action bar) */}
+                <div id="phase-storyboard" className="scroll-mt-20" />
+                <div id="phase-assets" className="scroll-mt-20" />
 
-            {generationError && !isTyping && phase !== 'panels' && phase !== 'script' && phase !== 'loading' && (
-                <div className="px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/60">
-                    <PhaseErrorBanner
-                        phase="生成"
-                        message={generationError}
-                        onRetry={() => {
-                            setGenerationError(null)
-                            if (phase === 'confirm') handleConfirmAssets()
-                        }}
-                        onSkip={() => setGenerationError(null)}
-                    />
-                </div>
-            )}
+                {/* Phase Action Bar */}
+                {phase === 'confirm' && !isTyping && (
+                    <div className="flex items-center justify-center gap-3 px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/80">
+                        <Button
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm"
+                            onClick={handleConfirmAssets}
+                        >
+                            <Sparkles className="h-4 w-4 mr-2" />
+                            确认角色与场景，开始生成分镜首帧
+                        </Button>
+                    </div>
+                )}
+
+                {streamStatus === 'streaming' && phase === 'script' && (
+                    <div className="px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/80">
+                        <div className="space-y-2 max-w-2xl mx-auto">
+                            <div className="flex items-center justify-between text-sm">
+                                <span className="text-zinc-300 flex items-center gap-2">
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+                                    {streamPhase === 'analyzing' ? '分析剧情...' :
+                                     streamPhase === 'writing' ? '生成剧本...' :
+                                     streamPhase === 'finalizing' ? '整理结果...' : '准备中...'}
+                                </span>
+                                <span className="text-zinc-500">{streamPct}%</span>
+                            </div>
+                            <div className="h-1.5 rounded bg-zinc-800 overflow-hidden">
+                                <div
+                                    className="h-full bg-emerald-500 transition-all"
+                                    style={{ width: `${streamPct}%` }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Phase anchors: render + qa (mapped to panels progress / video start region) */}
+                <div id="phase-render" className="scroll-mt-20" />
+                <div id="phase-qa" className="scroll-mt-20" />
+
+                {phase === 'panels' && panelProgress && (
+                    <div className="flex items-center justify-center gap-3 px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/80">
+                        <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                        <span className="text-sm text-zinc-400">
+                            正在生成分镜首帧 ({panelProgress.done}/{panelProgress.total})
+                        </span>
+                    </div>
+                )}
+
+                {(phase === 'video') && !isTyping && !panelProgress && Object.keys(panelImages).length > 0 && (
+                    <div className="flex items-center justify-center gap-3 px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/80">
+                        <Button
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm"
+                            onClick={handleStartVideoGeneration}
+                        >
+                            <Film className="h-4 w-4 mr-2" />
+                            生成全部视频
+                        </Button>
+                    </div>
+                )}
+
+                {streamError && !isTyping && (phase === 'script' || phase === 'loading') && (
+                    <div className="px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/60">
+                        <PhaseErrorBanner
+                            phase="剧本"
+                            message={streamError}
+                            onRetry={() => {
+                                setGenerationError(null)
+                                handleGenerateScript()
+                            }}
+                        />
+                    </div>
+                )}
+
+                {generationError && !isTyping && phase === 'panels' && (
+                    <div className="px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/60">
+                        <PhaseErrorBanner
+                            phase="分镜生成"
+                            message={generationError}
+                            onRetry={() => {
+                                setGenerationError(null)
+                                handleConfirmAssets()
+                            }}
+                            onSkip={() => setGenerationError(null)}
+                        />
+                    </div>
+                )}
+
+                {generationError && !isTyping && phase !== 'panels' && phase !== 'script' && phase !== 'loading' && (
+                    <div className="px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/60">
+                        <PhaseErrorBanner
+                            phase="生成"
+                            message={generationError}
+                            onRetry={() => {
+                                setGenerationError(null)
+                                if (phase === 'confirm') handleConfirmAssets()
+                            }}
+                            onSkip={() => setGenerationError(null)}
+                        />
+                    </div>
+                )}
+            </div>
         </div>
     )
 }
