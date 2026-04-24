@@ -547,39 +547,101 @@ class ToolHandlers:
     async def suggest_fixes(
         self,
         panel_id: str,
-        issues: List[str],
+        issues: Optional[List[Any]] = None,
+        qa_report: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        建议修复方案
-        
+        建议修复方案 - 委托给 FixPlanGenerator.
+
+        支持两种输入:
+        - issues: 字符串 code 列表 (如 ["BLACK_IMAGE"]) 或完整 issue 字典列表
+        - qa_report: analyze_quality 返回的 QA 报告字典, 从中抽取 issues
+
         Args:
             panel_id: 分镜ID
-            issues: 问题列表
-            
+            issues: 问题列表 (可选)
+            qa_report: QA 报告字典 (可选)
+
         Returns:
-            修复建议
+            修复建议 (含排序后的 fix options)
         """
         try:
-            logger.info(f"Suggesting fixes for panel {panel_id}, issues: {issues}")
-            
-            # TODO: 调用LLM生成修复建议
+            logger.info(f"Suggesting fixes for panel {panel_id}")
+
+            # 规范化 issues 为 FixPlanGenerator 需要的字典格式
+            normalized_issues: List[Dict[str, Any]] = []
+
+            # 优先使用显式 issues 列表, 其次从 qa_report 中抽取
+            raw_issues: List[Any] = []
+            if issues:
+                raw_issues = list(issues)
+            elif qa_report and isinstance(qa_report, dict):
+                raw_issues = list(qa_report.get("issues") or [])
+
+            # 若仍为空且有 panel_id, 尝试从 Panel 历史 QA 数据派生 issue codes
+            if not raw_issues and panel_id:
+                panel = self.db.query(Panel).filter(Panel.id == panel_id).first()
+                if panel is not None:
+                    if (panel.error_count or 0) > 0 or (panel.warning_count or 0) > 0:
+                        # 无具体 code 时给出通用占位, 触发 change_seed 兜底不可行,
+                        # 所以仅在有明确 code 时派遣. 此处直接返回空建议.
+                        pass
+
+            for item in raw_issues:
+                if isinstance(item, str):
+                    normalized_issues.append({"code": item, "level": "warning", "message": item})
+                elif isinstance(item, dict):
+                    normalized_issues.append({
+                        "code": item.get("code", ""),
+                        "level": item.get("level", "warning"),
+                        "message": item.get("message", ""),
+                    })
+
+            if not normalized_issues:
+                return {
+                    "success": True,
+                    "panel_id": panel_id,
+                    "suggestions": [],
+                    "fix_plan": {"options": [], "best_option": None},
+                    "message": "无待修复问题",
+                }
+
+            # 委托 FixPlanGenerator 生成排序后的修复选项
+            from app.services.qa.fix_plan_generator import generate_fix_options, get_best_fix
+
+            options = generate_fix_options(
+                issues=normalized_issues,
+                panel_id=panel_id,
+            )
+            best = get_best_fix(normalized_issues, panel_id=panel_id)
+
+            options_out = [o.model_dump() for o in options]
+            best_out = best.model_dump() if best is not None else None
+
+            # 向后兼容: 同步输出 suggestions 列表 (每个 issue 对应最高优先级 fix)
             suggestions = [
                 {
-                    "issue": issue,
-                    "fix": f"建议修复: {issue}",
-                    "auto_fixable": False,
+                    "issue": issue.get("code"),
+                    "fix": (options_out[0]["description"] if options_out else f"建议修复: {issue.get('code')}"),
+                    "fix_type": (options_out[0]["fix_type"] if options_out else None),
+                    "auto_fixable": bool(options_out),
                 }
-                for issue in issues
+                for issue in normalized_issues
             ]
-            
+
             return {
                 "success": True,
+                "panel_id": panel_id,
+                "fix_plan": {
+                    "options": options_out,
+                    "best_option": best_out,
+                },
                 "suggestions": suggestions,
-                "message": f"生成了 {len(suggestions)} 条修复建议",
+                "message": f"生成了 {len(options_out)} 个修复选项",
             }
-            
+
         except Exception as e:
-            logger.error(f"Suggest fixes failed: {e}")
+            logger.error(f"Suggest fixes failed: {e}", exc_info=True)
             return {
                 "success": False,
                 "error": str(e),
