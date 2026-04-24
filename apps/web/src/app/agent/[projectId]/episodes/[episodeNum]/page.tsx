@@ -8,9 +8,10 @@ import Link from 'next/link'
 import { AgentChat, AgentMessage } from '@/components/agent/AgentChat'
 import { EpisodeTree } from '@/components/agent/EpisodeTree'
 import { PhaseErrorBanner } from '@/components/agent/PhaseErrorBanner'
+import { ConversationSelector } from '@/components/agent/ConversationSelector'
 import { VideoCard, VideoCardData, PanelImage, PanelMeta } from '@/components/agent/VideoCard'
 import { conversationsApi, api } from '@/lib/api'
-import { agentApi } from '@/lib/api/services'
+import { agentApi, type Conversation } from '@/lib/api/services'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { useEpisodeTreeData } from '@/hooks/useEpisodeTreeData'
@@ -192,6 +193,8 @@ export default function EpisodeConversationPage() {
         if (loadStartedRef.current) return
         loadStartedRef.current = true
 
+        const conversationParam = searchParams?.get('conversation') ?? null
+
         const loadEpisodeConversation = async () => {
             try {
                 console.log(`[Episode ${episodeNum}] Loading conversation...`)
@@ -212,8 +215,18 @@ export default function EpisodeConversationPage() {
                     }
                 }
 
-                // 2. Get or create episode conversation
-                const episodeConv = await conversationsApi.getOrCreateEpisode(projectId, episodeNum)
+                // 2. Get requested conversation or create default episode conversation
+                let episodeConv: Conversation | null = null
+                if (conversationParam) {
+                    try {
+                        episodeConv = await conversationsApi.get(conversationParam)
+                    } catch (err) {
+                        console.warn(`[Episode ${episodeNum}] Explicit conversation ${conversationParam} not found, falling back to default`, err)
+                    }
+                }
+                if (!episodeConv) {
+                    episodeConv = await conversationsApi.getOrCreateEpisode(projectId, episodeNum)
+                }
                 setConversationId(episodeConv.id)
 
                 // 3. Load history and restore phase
@@ -263,7 +276,61 @@ export default function EpisodeConversationPage() {
         }
 
         loadEpisodeConversation()
-    }, [projectId, episodeNum])
+    }, [projectId, episodeNum, searchParams])
+
+    // ─── React to ?conversation= changes post-mount ───
+    useEffect(() => {
+        const target = searchParams?.get('conversation') ?? null
+        if (!target) return
+        if (target === conversationId) return
+        if (isLoading) return  // initial load will handle it
+
+        let cancelled = false
+        const reload = async () => {
+            try {
+                const conv = await conversationsApi.get(target)
+                if (cancelled) return
+                setConversationId(conv.id)
+                // Reset transient state so history applies cleanly
+                setMessages([])
+                setScriptData(null)
+                setPanelImages({})
+                setPhase('loading')
+                hasAutoTriggered.current = false
+                loadStartedRef.current = false
+
+                if (conv.message_count > 0) {
+                    const msgs = await conversationsApi.getMessages(conv.id, 100, 0)
+                    if (cancelled || !msgs) {
+                        // Even if no messages, suppress auto-trigger
+                        hasAutoTriggered.current = true
+                        return
+                    }
+                    const hist: AgentMessage[] = msgs.map((msg: any, idx: number) => ({
+                        id: msg.id || `history-${idx}`,
+                        role: msg.role as 'user' | 'assistant' | 'system',
+                        content: msg.content,
+                        timestamp: new Date(msg.created_at).getTime(),
+                        card: msg.entities_json?.card || msg.entities_json,
+                    }))
+                    setMessages(hist)
+                    const pipelineMsg = [...hist].reverse().find(m => m.card?.type === 'episode_pipeline')
+                    if (pipelineMsg?.card) {
+                        setPhase(pipelineMsg.card.phase as EpisodePhase)
+                        if (pipelineMsg.card.script_data) setScriptData(pipelineMsg.card.script_data)
+                        if (pipelineMsg.card.panel_images) setPanelImages(pipelineMsg.card.panel_images)
+                    }
+                }
+                // Always suppress auto-trigger when user explicitly switched conversations —
+                // don't overwrite their browsing state even if the conversation is empty.
+                hasAutoTriggered.current = true
+            } catch (err) {
+                console.warn('[ConversationSelector] failed to load', target, err)
+            }
+        }
+        reload()
+        return () => { cancelled = true }
+    }, [searchParams, conversationId, isLoading])
 
     // ─── Save message helper ───
     const saveMessage = useCallback(async (
@@ -825,6 +892,10 @@ export default function EpisodeConversationPage() {
                         </p>
                     </div>
                     <div className="ml-auto flex items-center gap-2">
+                        <ConversationSelector
+                            projectId={projectId}
+                            currentConversationId={conversationId}
+                        />
                         {/* Phase anchor: export (next to the 导出剧本 button) */}
                         <div id="phase-export" className="scroll-mt-20" />
                         {scriptData && (
