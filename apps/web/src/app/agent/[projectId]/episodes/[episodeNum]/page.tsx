@@ -467,7 +467,21 @@ export default function EpisodeConversationPage() {
         }
         setMessages(prev => [...prev, progressMsg])
         setIsTyping(true)
-        setPanelProgress({ done: 0, total: scriptData.panels.length })
+
+        const total = scriptData.panels.length
+        setPanelProgress({ done: 0, total })
+
+        // Honest time-paced progress:
+        // Assume each panel averages ~12s with concurrency 5 → expected total ≈ ceil(N/5) * 12s.
+        // We tick `done` such that it reaches 0.9 * total at expectedMs, then stalls at 0.9N
+        // until the real response lands (and we snap to total).
+        const expectedMs = Math.max(8000, Math.ceil(total / 5) * 12000)
+        const startAt = Date.now()
+        const tickId = setInterval(() => {
+            const elapsed = Date.now() - startAt
+            const frac = Math.min(0.9, (elapsed / expectedMs) * 0.9)
+            setPanelProgress({ done: Math.floor(frac * total), total })
+        }, 500)
 
         try {
             const result = await generatePanelImages(episodeNum, {
@@ -484,6 +498,8 @@ export default function EpisodeConversationPage() {
                     characters: p.characters,
                 })),
             })
+            clearInterval(tickId)
+            setPanelProgress({ done: total, total })
 
             // Collect results
             const images: Record<string, string> = {}
@@ -537,7 +553,12 @@ export default function EpisodeConversationPage() {
                 script_data: scriptData,
                 panel_images: images,
             })
+
+            // Clear the bar a moment after success so user sees the 100% fill
+            setTimeout(() => setPanelProgress(null), 600)
         } catch (e: any) {
+            clearInterval(tickId)
+            setPanelProgress(null)
             setGenerationError(e.message || '分镜首帧生成失败')
             const errorMsg: AgentMessage = {
                 id: 'panel-error',
@@ -548,7 +569,6 @@ export default function EpisodeConversationPage() {
             setMessages(prev => prev.filter(m => m.id !== 'panel-progress').concat(errorMsg))
         } finally {
             setIsTyping(false)
-            setPanelProgress(null)
         }
     }
 
@@ -1018,11 +1038,28 @@ export default function EpisodeConversationPage() {
                 <div id="phase-qa" className="scroll-mt-20" />
 
                 {phase === 'panels' && panelProgress && (
-                    <div className="flex items-center justify-center gap-3 px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/80">
-                        <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
-                        <span className="text-sm text-zinc-400">
-                            正在生成分镜首帧 ({panelProgress.done}/{panelProgress.total})
-                        </span>
+                    <div className="px-6 py-3 border-t border-zinc-800/50 bg-zinc-900/80">
+                        <div className="space-y-2 max-w-2xl mx-auto">
+                            <div className="flex items-center justify-between text-sm">
+                                <span className="text-zinc-300 flex items-center gap-2">
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+                                    正在生成分镜首帧...
+                                </span>
+                                <span className="text-zinc-500">
+                                    {panelProgress.done}/{panelProgress.total}
+                                </span>
+                            </div>
+                            <div className="h-1.5 rounded bg-zinc-800 overflow-hidden">
+                                <div
+                                    className="h-full bg-emerald-500 transition-all duration-500"
+                                    style={{
+                                        width: `${panelProgress.total > 0
+                                            ? (panelProgress.done / panelProgress.total) * 100
+                                            : 0}%`,
+                                    }}
+                                />
+                            </div>
+                        </div>
                     </div>
                 )}
 
