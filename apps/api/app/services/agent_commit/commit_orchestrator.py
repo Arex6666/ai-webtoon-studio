@@ -119,12 +119,18 @@ async def commit_agent_to_studio(
         # convert the key into a presigned URL before persisting. ``get_url``
         # returns "" when the storage backend is unavailable; coerce that to
         # ``None`` so the column stays NULL rather than an empty-string URL.
-        # TODO: a separate ``preview_key`` column on Panel would let us
-        # re-sign URLs cheaply when they expire instead of having to
-        # regenerate from the original source.
+        # TODO(commit_orchestrator): Panel.preview_url stores a presigned URL
+        # with a 7-day MinIO TTL (the maximum allowed). The following readers
+        # consume preview_url verbatim without re-signing, so the URL WILL
+        # break after 7 days:
+        #   - apps/api/app/services/export/bundle_builder.py
+        #   - apps/api/app/services/conversation/tool_handlers.py
+        #   - apps/api/app/workers/export_worker.py
+        # Architectural fix: add a separate ``Panel.preview_key`` column and
+        # re-sign on read. Tracked as a follow-up task.
         preview_url = None
         if preview_key:
-            signed = storage_client.get_url(preview_key, expires=3600)
+            signed = storage_client.get_url(preview_key, expires=604800)
             preview_url = signed or None
 
         panel = Panel(
