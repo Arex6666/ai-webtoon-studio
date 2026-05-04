@@ -402,8 +402,14 @@ def run_async(coro):
 
 def _resolve_timeline_context(db, clip: Clip) -> tuple[str, str]:
     timeline = db.query(Timeline).filter(Timeline.id == clip.timeline_id).first()
-    chapter_id = timeline.chapter_id if timeline else "unknown"
-    project_id = timeline.project_id if timeline else "unknown"
+    # Bug #3: Timeline has no project_id column; reach it via the chapter relation.
+    if timeline:
+        chapter = timeline.chapter
+        chapter_id = timeline.chapter_id
+        project_id = chapter.project_id if chapter else "unknown"
+    else:
+        chapter_id = "unknown"
+        project_id = "unknown"
     return chapter_id, project_id
 
 

@@ -14,14 +14,16 @@ def _warmup_app_import():
 _warmup_app_import()
 
 
-def test_resolve_video_target_does_not_access_timeline_project_id():
-    """Bug #3: Timeline has no project_id; resolution must go via chapter."""
+def test_no_module_accesses_timeline_project_id():
+    """Bug #3: Timeline has no project_id; no production code may access it."""
     from app.api.routes import jobs as jobs_route
+    from app.workers import video_worker
 
-    src = inspect.getsource(jobs_route)
-    assert "timeline.project_id" not in src, (
-        "Code still references non-existent Timeline.project_id"
-    )
+    for module in (jobs_route, video_worker):
+        src = inspect.getsource(module)
+        assert "timeline.project_id" not in src, (
+            f"{module.__name__} still references non-existent Timeline.project_id"
+        )
 
 
 def test_cancel_job_revokes_celery_task_id_not_job_id():
