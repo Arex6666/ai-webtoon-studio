@@ -853,7 +853,7 @@ async def create_storyboard(
     该 API 会立即返回 job_id，实际分镜在后台执行。
     进度通过 WebSocket 推送：storyboard_progress, storyboard_done, storyboard_error
     """
-    from app.models.reqnder_job import RenderJob
+    from app.models.render_job import RenderJob
     import uuid
     
     chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()

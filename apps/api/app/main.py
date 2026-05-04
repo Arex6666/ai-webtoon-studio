@@ -18,7 +18,7 @@ from app.celery_app import celery_app
 from app import models  # noqa: F401 - 确保所有模型在路由导入前加载
 # Trigger reload
 
-from app.api.routes import projects, chapters, panels, assets, render, typeset, compose, auth, identity, scene_anchor, brain, qa, ws, studios, exports, shot_versions, jobs, timeline, bindings, analytics, release, layerpacks, generate, templates, drafts, batch_render, script_pipeline, automation, asset_autobuild, props, conversations, faceid, export_strip, agent, providers, episode_video, media
+from app.api.routes import projects, chapters, panels, assets, render, typeset, compose, auth, identity, scene_anchor, brain, qa, ws, studios, exports, shot_versions, jobs, timeline, bindings, analytics, release, layerpacks, generate, templates, drafts, batch_render, script_pipeline, automation, asset_autobuild, props, conversations, faceid, export_strip, agent, providers, episode_video, media, qa_fix, versions, voices, music
 
 # 配置日志
 logging.basicConfig(
@@ -179,6 +179,18 @@ app.include_router(episode_video.router, prefix="/api/v1/agent", tags=["视频�
 
 # Media URL (presigned URL generation)
 app.include_router(media.router, prefix="/api/v1", tags=["媒体"])
+
+# E5: NeedsFix Workflow with Guided Repair
+app.include_router(qa_fix.router, prefix="/api/v1/qa-fix", tags=["质量修复"])
+
+# E3: Persistent Version Tree
+app.include_router(versions.router, prefix="/api/v1/versions", tags=["版本管理"])
+
+# Voice Agent (AI 配音智能体)
+app.include_router(voices.router, prefix="/api/v1/voices", tags=["配音"])
+
+# Music Asset Management
+app.include_router(music.router, prefix="/api/v1/music", tags=["音乐"])
 
 
 @app.get("/")

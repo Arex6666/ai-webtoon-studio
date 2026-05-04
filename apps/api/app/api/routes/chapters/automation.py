@@ -156,7 +156,7 @@ async def confirm_assets(
         # Dispatch batch render via Celery image worker
         from app.celery_app import celery_app as _celery
         _celery.send_task(
-            "app.workers.image_worker.execute_render_job",
+            "app.workers.async_runner.execute_render_job_celery",
             args=[render_job_id],
             queue="image",
         )
