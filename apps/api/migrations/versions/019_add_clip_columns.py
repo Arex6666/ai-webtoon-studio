@@ -1,13 +1,13 @@
 """Add negative and seed columns to clips table.
 
 Revision ID: 019_add_clip_columns
-Revises: 018_add_performance_indexes
+Revises: 018
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "019_add_clip_columns"
-down_revision = "018_add_performance_indexes"
+down_revision = "018"
 branch_labels = None
 depends_on = None
 

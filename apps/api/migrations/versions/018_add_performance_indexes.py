@@ -1,13 +1,13 @@
 """Add performance indexes for foreign key columns used in list queries.
 
 Revision ID: 018
-Revises: 017
+Revises: 017_voice_assets
 Create Date: 2026-03-14
 """
 from alembic import op
 
 revision = "018"
-down_revision = "017"
+down_revision = "017_voice_assets"
 branch_labels = None
 depends_on = None
 
