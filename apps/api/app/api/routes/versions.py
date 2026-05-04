@@ -2,12 +2,10 @@
 Versions API - 版本管理路由 (E3: Persistent Version Tree)
 """
 from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
 from typing import Optional, List
 from pydantic import BaseModel
 import logging
 
-from app.db.database import get_db
 from app.services.graph.version_manager import VersionManager, Snapshot, DiffResult
 from app.api.deps import get_current_user
 from app.models.user import User
@@ -31,8 +29,8 @@ class RollbackRequest(BaseModel):
     created_by: Optional[str] = "user"
 
 
-def get_version_manager(db: Session = Depends(get_db)) -> VersionManager:
-    return VersionManager(db)
+def get_version_manager() -> VersionManager:
+    return VersionManager()
 
 
 @router.get("/{entity_type}/{entity_id}/snapshots")
@@ -44,7 +42,9 @@ async def list_snapshots(
     current_user: User = Depends(get_current_user),
 ):
     """List snapshots for an entity."""
-    snapshots = vm.list_snapshots(entity_id, limit=limit, entity_type=entity_type)
+    # TODO(versions): entity_type filtering not yet implemented in VersionManager;
+    # the path param is preserved for backward compatibility but does not narrow results.
+    snapshots = vm.list_snapshots(entity_id, limit=limit)
     return {
         "entity_type": entity_type,
         "entity_id": entity_id,
@@ -110,7 +110,9 @@ async def rollback_to_snapshot(
     current_user: User = Depends(get_current_user),
 ):
     """Rollback an entity to a specific snapshot."""
-    data = vm.rollback_to(entity_id, snapshot_id, entity_type=entity_type)
+    # TODO(versions): entity_type scoping not yet implemented in VersionManager;
+    # the path param is preserved for backward compatibility but is not enforced.
+    data = vm.rollback_to(entity_id, snapshot_id)
     if data is None:
         raise HTTPException(status_code=404, detail="Snapshot not found or does not match entity")
     return {
