@@ -157,7 +157,15 @@ def _resolve_video_target(db: Session, target_id: str) -> tuple[str, str, Option
     clip = db.query(Clip).filter(Clip.id == target_id).first()
     if clip:
         timeline = db.query(Timeline).filter(Timeline.id == clip.timeline_id).first()
-        return clip.id, clip.panel_id, timeline.chapter_id if timeline else None, timeline.project_id if timeline else None
+        # Bug #3: Timeline has no project_id column; reach it via the chapter relation.
+        if timeline:
+            chapter = timeline.chapter
+            chapter_id = timeline.chapter_id
+            project_id = chapter.project_id if chapter else None
+        else:
+            chapter_id = None
+            project_id = None
+        return clip.id, clip.panel_id, chapter_id, project_id
 
     panel = db.query(Panel).filter(Panel.id == target_id).first()
     if not panel:
@@ -202,7 +210,15 @@ def _resolve_video_target(db: Session, target_id: str) -> tuple[str, str, Option
         logger.info(f"Auto-created clip {clip.id} for panel {panel.id}")
 
     timeline = db.query(Timeline).filter(Timeline.id == clip.timeline_id).first()
-    return clip.id, panel.id, timeline.chapter_id if timeline else panel.chapter_id, timeline.project_id if timeline else None
+    # Bug #3: Timeline has no project_id column; reach it via chapter relation.
+    if timeline:
+        chapter = timeline.chapter
+        chapter_id = timeline.chapter_id
+        project_id = chapter.project_id if chapter else None
+    else:
+        chapter_id = panel.chapter_id
+        project_id = None
+    return clip.id, panel.id, chapter_id, project_id
 
 
 # ============ Routes ============
@@ -278,7 +294,10 @@ async def create_unified_job(
     }
     if req.type in TASK_MAP:
         task_name, queue, args = TASK_MAP[req.type]
-        celery_app.send_task(task_name, args=args, queue=queue)
+        # Capture AsyncResult.id so cancel_job can revoke the real task later.
+        async_result = celery_app.send_task(task_name, args=args, queue=queue)
+        job.celery_task_id = async_result.id
+        db.commit()
     elif req.type == "storyboard":
         from app.api.routes.chapters.storyboard import run_storyboard_task
         background_tasks.add_task(
@@ -322,10 +341,12 @@ async def create_image_job(
     )
     
     # 异步执行
-    execute_image_job.delay(job.id, request.panel_id)
-    
+    async_result = execute_image_job.delay(job.id, request.panel_id)
+    job.celery_task_id = async_result.id
+    db.commit()
+
     logger.info(f"Image job created: {job.id} for panel {request.panel_id}")
-    
+
     return JobResponse(
         job_id=job.id,
         status="queued",
@@ -355,8 +376,10 @@ async def create_anchor_job(
         chapter_id=panel.chapter_id,
     )
     
-    execute_anchor_job.delay(job.id, request.panel_id, request.kind)
-    
+    async_result = execute_anchor_job.delay(job.id, request.panel_id, request.kind)
+    job.celery_task_id = async_result.id
+    db.commit()
+
     return JobResponse(
         job_id=job.id,
         status="queued",
@@ -392,8 +415,10 @@ async def create_video_job(
         chapter_id=chapter_id,
     )
     
-    execute_video_job.delay(job.id, request.clip_id)
-    
+    async_result = execute_video_job.delay(job.id, request.clip_id)
+    job.celery_task_id = async_result.id
+    db.commit()
+
     return JobResponse(
         job_id=job.id,
         status="queued",
@@ -420,8 +445,10 @@ async def create_export_job(
         project_id=chapter.project_id,
     )
     
-    execute_export_job.delay(job.id, request.chapter_id)
-    
+    async_result = execute_export_job.delay(job.id, request.chapter_id)
+    job.celery_task_id = async_result.id
+    db.commit()
+
     return JobResponse(
         job_id=job.id,
         status="queued",
@@ -465,18 +492,28 @@ async def cancel_job(job_id: str, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    
+
     if job.status in ["succeeded", "failed"]:
         raise HTTPException(status_code=400, detail="Cannot cancel completed job")
-    
+
+    # Bug #4: Celery's control plane only knows tasks by AsyncResult.id, not our
+    # internal Job.id. Without celery_task_id we can't revoke the running task,
+    # so refuse with 409 (Conflict) — the resource exists but isn't in a
+    # cancelable state.
+    if not job.celery_task_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Job has no associated Celery task id; cannot revoke",
+        )
+
     job.status = "canceled"
     job.finished_at = datetime.utcnow()
     db.commit()
 
-    # Attempt to revoke the Celery task
+    # Attempt to revoke the Celery task by its real AsyncResult.id.
     try:
         from app.celery_app import celery_app as _celery
-        _celery.control.revoke(job_id, terminate=True, signal="SIGTERM")
+        _celery.control.revoke(job.celery_task_id, terminate=True, signal="SIGTERM")
     except Exception:
         pass  # Best-effort: task may have already completed
 
