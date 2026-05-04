@@ -13,15 +13,6 @@ import logging
 from app.core.database import get_db
 from app.models.project import Project
 from app.models.chapter import Chapter
-from app.models.panel import Panel
-from app.models.timeline import Timeline, Clip
-from app.models.asset import Asset
-from app.models.prop_asset import PropAsset
-from app.models.asset_relation import AssetRelation
-from app.models.voice_asset import VoiceAgent, MusicAsset
-from app.models.snapshot import Snapshot
-from app.models.job import Job
-from app.models.conversation import Conversation
 from app.services.brain.standard_llm import StandardLLMService
 
 logger = logging.getLogger(__name__)
@@ -293,40 +284,14 @@ async def delete_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Explicit manual cascades to bypass SQLite IntegrityErrors for unconfigured schemas
-    # 1. Get all chapters to delete their nested entities
-    chapter_ids = [c.id for c in project.chapters]
-    if chapter_ids:
-        # 1.a Delete Clips
-        db.query(Clip).filter(
-            Clip.timeline_id.in_(db.query(Timeline.id).filter(Timeline.chapter_id.in_(chapter_ids)))
-        ).delete(synchronize_session=False)
-        db.query(Clip).filter(
-            Clip.panel_id.in_(db.query(Panel.id).filter(Panel.chapter_id.in_(chapter_ids)))
-        ).delete(synchronize_session=False)
-        
-        # 1.b Delete Timelines
-        db.query(Timeline).filter(Timeline.chapter_id.in_(chapter_ids)).delete(synchronize_session=False)
-
-        # 1.c Delete Panels
-        db.query(Panel).filter(Panel.chapter_id.in_(chapter_ids)).delete(synchronize_session=False)
-
-        # 1.d Delete Snapshots belonging to chapters
-        db.query(Snapshot).filter(Snapshot.chapter_id.in_(chapter_ids)).delete(synchronize_session=False)
-
-    # 2. Delete project level entities
-    db.query(Snapshot).filter(Snapshot.project_id == project_id).delete(synchronize_session=False)
-    db.query(VoiceAgent).filter(VoiceAgent.project_id == project_id).delete(synchronize_session=False)
-    db.query(MusicAsset).filter(MusicAsset.project_id == project_id).delete(synchronize_session=False)
-    db.query(AssetRelation).filter(AssetRelation.project_id == project_id).delete(synchronize_session=False)
-    db.query(Asset).filter(Asset.project_id == project_id).delete(synchronize_session=False)
-    db.query(PropAsset).filter(PropAsset.project_id == project_id).delete(synchronize_session=False)
-    db.query(Job).filter(Job.project_id == project_id).delete(synchronize_session=False)
-    db.query(Conversation).filter(Conversation.project_id == project_id).delete(synchronize_session=False)
-    
-    # 3. Delete chapters
-    db.query(Chapter).filter(Chapter.project_id == project_id).delete(synchronize_session=False)
-
+    # Rely on ORM cascade ("all, delete-orphan") declared on Project's
+    # relationships (chapters, assets, jobs, prop_assets, asset_relations,
+    # conversations) and the backref-side cascades on VoiceAgent,
+    # MusicAsset, and Snapshot. Chapter's own cascades (panels, timeline,
+    # snapshots, jobs, asset_relations, etc.) handle the next level, and
+    # Timeline/Panel cascades to Clip handle the leaves. A single
+    # ``db.delete(project)`` therefore tears the whole tree down without
+    # the route needing to re-implement the schema.
     db.delete(project)
     db.commit()
 

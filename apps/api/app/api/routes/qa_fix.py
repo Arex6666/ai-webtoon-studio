@@ -142,7 +142,10 @@ async def apply_fix(
         id=str(uuid.uuid4()),
         type="image_job",
         provider="doubao",
-        project_id=getattr(panel, 'project_id', None),
+        # Panel has no project_id column; derive it via the chapter
+        # relationship. Lazy-load is safe here — the panel was loaded in
+        # the same session a few lines above.
+        project_id=(panel.chapter.project_id if panel.chapter else None),
         chapter_id=panel.chapter_id,
         panel_id=panel_id,
         inputs_json={"fix_params": params, "fix_type": selected.fix_type, "tier": "normal"},

@@ -194,16 +194,22 @@ async def list_episode_video_jobs(
         Job.type == "episode_video",
     )
 
-    jobs = query.order_by(Job.created_at.desc()).limit(50).all()
+    # Filter BEFORE truncation. ``episode_number`` lives inside the JSON
+    # ``inputs_json`` column; JSON access syntax differs between SQLite
+    # (dev) and Postgres (prod), so we pull a generous batch ordered
+    # newest-first, filter in Python, then slice to the response cap.
+    candidate_jobs = query.order_by(Job.created_at.desc()).limit(500).all()
+    if episode_num is not None:
+        candidate_jobs = [
+            j for j in candidate_jobs
+            if (j.inputs_json or {}).get("episode_number") == episode_num
+        ]
+    jobs = candidate_jobs[:50]
 
     results = []
     for job in jobs:
         outputs = job.outputs_json or {}
         inputs = job.inputs_json or {}
-
-        # 按 episode_num 过滤
-        if episode_num is not None and inputs.get("episode_number") != episode_num:
-            continue
 
         results.append(VideoJobStatusResponse(
             job_id=job.id,

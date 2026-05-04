@@ -7,7 +7,14 @@ from app.core.storage import get_storage_client
 
 router = APIRouter()
 
-ALLOWED_PREFIXES = ("generated/", "panels/", "exports/", "assets/")
+ALLOWED_PREFIXES = (
+    "generated/",
+    "panels/",
+    "exports/",
+    "assets/",
+    "agent-commit/",
+    "agent_commit/",
+)
 
 
 @router.get("/media/url")
