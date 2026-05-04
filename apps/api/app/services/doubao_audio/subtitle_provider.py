@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from app.core.config import settings
-from app.services.brain.standard_llm import get_llm_service
+from app.services.brain.base import get_brain_service
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +125,7 @@ class DoubaoSubtitleProvider:
     ) -> Optional[List[SubtitleCue]]:
         """使用 LLM 进行时间轴对齐"""
         try:
-            llm = get_llm_service()
+            llm = get_brain_service()
 
             # 构建 prompt
             prompt = f"""请将以下台词按时间轴分割，每个片段时长根据句子长度比例分配。
@@ -145,9 +145,9 @@ class DoubaoSubtitleProvider:
 start_pct 和 end_pct 是时间百分比 (0-1)。
 只返回 JSON，不要其他内容。"""
 
-            response = await llm.chat_completion(
+            response = await llm._chat_completion(
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
+                response_format="json",
             )
 
             import json
