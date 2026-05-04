@@ -418,48 +418,13 @@ async def generate_episode1_script(req: Episode1Request):
 
         result = Episode1Response(episodeTitle=episode_title, scriptText=script_text)
 
-        # Persist script outputs as conversation cards for later lean-payload commit
-        try:
-            from app.services.agent_commit.card_writer import (
-                upsert_card, build_characters_card, build_scenes_card, build_art_style_card
-            )
-            from app.core.database import SessionLocal
-
-            cid = getattr(req, "conversation_id", None)
-            if cid:
-                db = SessionLocal()
-                try:
-                    if hasattr(result, "characters") and result.characters:
-                        upsert_card(
-                            db, cid, "characters",
-                            build_characters_card([
-                                c.model_dump() if hasattr(c, "model_dump") else (c if isinstance(c, dict) else {})
-                                for c in result.characters
-                            ]),
-                        )
-                    if hasattr(result, "scenes") and result.scenes:
-                        upsert_card(
-                            db, cid, "scenes",
-                            build_scenes_card([
-                                s.model_dump() if hasattr(s, "model_dump") else (s if isinstance(s, dict) else {})
-                                for s in result.scenes
-                            ]),
-                        )
-                    if hasattr(result, "art_style") and result.art_style:
-                        art = result.art_style
-                        upsert_card(
-                            db, cid, "art_style",
-                            build_art_style_card(
-                                base_style=getattr(art, "base_style", "") or (art.get("base_style", "") if isinstance(art, dict) else ""),
-                                color_tone=getattr(art, "color_tone", "") or (art.get("color_tone", "") if isinstance(art, dict) else ""),
-                                atmosphere=getattr(art, "atmosphere", "") or (art.get("atmosphere", "") if isinstance(art, dict) else ""),
-                            ),
-                        )
-                    db.commit()
-                finally:
-                    db.close()
-        except Exception as e:
-            logger.warning(f"Failed to write script cards: {e}")
+        # NOTE: An earlier version of this endpoint attempted to persist
+        # ``result.characters`` / ``result.scenes`` / ``result.art_style`` as
+        # conversation cards here. ``Episode1Response`` only declares
+        # ``episodeTitle`` and ``scriptText``, so those ``hasattr`` guards
+        # were always-False — pure dead code. Removed (#20). The full
+        # ``/episode/{N}/script`` endpoint has its own legitimate card-write
+        # path on ``EpisodeScriptResponse`` which does declare those fields.
 
         return result
 
@@ -763,10 +728,31 @@ async def generate_full_episode_script(
             scene_tasks = [generate_scene_image(s) for s in scenes]
             all_results = await asyncio.gather(*char_tasks, *scene_tasks, return_exceptions=True)
 
-            # 提取结果（忽略异常）
+            # Surface partial gather-level failures rather than silently
+            # falling back to the original (un-image'd) lists. Inner
+            # ``generate_character_image`` / ``generate_scene_image`` already
+            # catch per-task exceptions and log/return the original entry,
+            # so a raw ``Exception`` here means a catastrophic failure that
+            # bypassed the inner handler — exactly what we want visible. (#12)
             char_count = len(characters)
-            characters = [r for r in all_results[:char_count] if isinstance(r, Character)] or characters
-            scenes = [r for r in all_results[char_count:] if isinstance(r, Scene)] or scenes
+            char_results = list(all_results[:char_count])
+            scene_results = list(all_results[char_count:])
+
+            for orig, res in zip(characters, char_results):
+                if isinstance(res, BaseException):
+                    logger.warning(
+                        f"[Episode {episode_number}] Character image gen failed for "
+                        f"'{getattr(orig, 'name', '?')}': {res!r}"
+                    )
+            for orig, res in zip(scenes, scene_results):
+                if isinstance(res, BaseException):
+                    logger.warning(
+                        f"[Episode {episode_number}] Scene image gen failed for "
+                        f"'{getattr(orig, 'name', '?')}': {res!r}"
+                    )
+
+            characters = [r for r in char_results if isinstance(r, Character)]
+            scenes = [r for r in scene_results if isinstance(r, Scene)]
 
             logger.info(f"[Episode {episode_number}] Character and scene image generation completed")
         else:
@@ -1067,9 +1053,12 @@ async def commit_to_studio(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    owner_id = getattr(project, "owner_id", None)
-    if owner_id and getattr(current_user, "id", None) and owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized for this project")
+    # TODO(authz): Project ownership is not yet modeled. The previous
+    # ``getattr(project, "owner_id", None)`` check always returned ``None``,
+    # so the 403 branch never fired — a no-op pretending to enforce authz.
+    # Removed to avoid a false sense of security; track real authz design
+    # (Project.owner_id column? Studio membership? Per-project ACL?) in a
+    # follow-up issue. (#19)
 
     try:
         result = await commit_agent_to_studio(db, project_id, req)

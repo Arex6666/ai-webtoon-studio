@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.models.chapter import Chapter
 from app.models.panel import Panel
 from app.schemas.agent_commit import CommitToStudioRequest
+from app.core.storage import storage_client
 from app.services.agent_commit.asset_sync import sync_character, sync_scene
 from app.services.agent_commit.conversation_reader import enrich_request_from_conversation
 from app.services.agent_commit.idempotency import find_existing_chapter
@@ -112,12 +113,26 @@ async def commit_agent_to_studio(
             except ImageFetchError as e:
                 warnings.append(f"panel #{agent_panel.order} preview failed: {e}")
 
+        # ``fetch_and_persist`` returns a raw MinIO storage key. The Panel
+        # model only has ``preview_url`` (no separate key column), and the
+        # frontend renders this directly as ``<img src>`` — so we must
+        # convert the key into a presigned URL before persisting. ``get_url``
+        # returns "" when the storage backend is unavailable; coerce that to
+        # ``None`` so the column stays NULL rather than an empty-string URL.
+        # TODO: a separate ``preview_key`` column on Panel would let us
+        # re-sign URLs cheaply when they expire instead of having to
+        # regenerate from the original source.
+        preview_url = None
+        if preview_key:
+            signed = storage_client.get_url(preview_key, expires=3600)
+            preview_url = signed or None
+
         panel = Panel(
             id=panel_id, chapter_id=chapter.id,
-            order_index=agent_panel.order if agent_panel.order else idx,
+            order_index=agent_panel.order if agent_panel.order is not None else idx,
             title=f"Panel {idx + 1}",
             summary=agent_panel.scene_description[:255] if agent_panel.scene_description else None,
-            spec_json=spec, render_status="draft", preview_url=preview_key,
+            spec_json=spec, render_status="draft", preview_url=preview_url,
         )
         db.add(panel)
 
