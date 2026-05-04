@@ -104,9 +104,9 @@ def get_available_voices() -> List[VoiceInfo]:
         VoiceInfo(
             voice_id="aio_invoice_male_yujie",
             name="男声-御姐",
-            gender="female",
+            gender="male",
             age_group="adult",
-            description="成熟女性声音",
+            description="成熟男性声音",
         ),
         VoiceInfo(
             voice_id="aio_invoice_male_zhisheng",

@@ -61,7 +61,6 @@ async def regenerate_asset_reference(
         character_description=asset.description,
         appearance_traits=traits,
         provider="mock",
-        db_session=None
     )
 
     return {"message": "Generation started", "status": "generating"}
