@@ -10,6 +10,7 @@ import logging
 
 from app.db.database import get_db
 from app.models import LayerPack, Panel
+from app.core.storage import storage_client
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -175,9 +176,19 @@ async def set_active_layerpack(
     db.query(LayerPack).filter(LayerPack.panel_id == panel_id).update({"is_active": "false"})
     lp.is_active = "true"
     
-    # 更新 Panel 的激活 LayerPack
+    # 更新 Panel 的激活 LayerPack. ``lp.file_full`` is a raw MinIO storage
+    # key, not a URL — never assign it directly to ``preview_url``. When
+    # ``full_url`` is missing, re-sign the key into a fresh presigned URL so
+    # legacy readers (those still reading ``preview_url`` directly) get a
+    # working link. New readers go via ``resolve_panel_preview_url`` and
+    # don't need the fallback URL at all.
     panel.active_layer_pack_id = request.layerpack_id
-    panel.preview_url = lp.full_url or lp.file_full
+    if lp.full_url:
+        panel.preview_url = lp.full_url
+    elif lp.file_full:
+        panel.preview_url = storage_client.get_url(lp.file_full, expires=3600) or None
+    else:
+        panel.preview_url = None
     panel.preview_key = lp.file_full or None
     
     db.commit()

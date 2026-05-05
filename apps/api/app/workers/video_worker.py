@@ -135,8 +135,11 @@ def _resolve_start_frame_url(db, params: Dict[str, Any], clip: Clip, panel: Opti
     if layerpack_url:
         return layerpack_url
 
-    if panel and _as_text(panel.preview_url):
-        return _as_text(panel.preview_url)
+    if panel:
+        from app.services.storage.panel_preview import resolve_panel_preview_url
+        resolved = resolve_panel_preview_url(panel)
+        if resolved:
+            return resolved
 
     spec = panel.spec_json if panel else {}
     if isinstance(spec, dict):
