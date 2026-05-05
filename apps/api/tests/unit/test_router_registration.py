@@ -53,21 +53,41 @@ def test_router_registered(test_client, label, substring):
 
 
 def test_confirm_assets_dispatches_existing_task():
-    """Bug #6: dispatch must reference a real Celery task name."""
-    # Importing the worker module ensures the @shared_task decorators run
-    # and register their task names against the celery_app instance.
+    """Bug #6: dispatch must reference a real Celery task name AND match its arity.
+
+    The original bug shipped the right task name but only one positional arg,
+    while the wrapper needed two. This test asserts both: name is registered,
+    and the args= list length matches the task's parameter count (excluding
+    self for bound tasks).
+    """
     import app.workers.async_runner  # noqa: F401
     from app.celery_app import celery_app
     from app.api.routes.chapters import automation as ca
 
     src = inspect.getsource(ca)
-    m = re.search(r"send_task\(\s*['\"]([^'\"]+)['\"]", src)
-    assert m, "send_task call not found in automation.py"
-    dispatched = m.group(1)
+    m = re.search(
+        r"send_task\(\s*['\"]([^'\"]+)['\"]\s*,\s*args\s*=\s*\[([^\]]*)\]",
+        src,
+    )
+    assert m, "send_task call with args=[...] not found in automation.py"
+    dispatched, args_literal = m.group(1), m.group(2)
 
     registered = set(celery_app.tasks.keys())
     assert dispatched in registered, (
         f"Dispatched task {dispatched!r} is not a registered Celery task. "
         f"Candidate render/job tasks: "
         f"{sorted(t for t in registered if 'render' in t or 'job' in t)}"
+    )
+
+    task_func = celery_app.tasks[dispatched].run
+    sig = inspect.signature(task_func)
+    expected_arity = len(sig.parameters)
+
+    # Count comma-separated args in the dispatched call. Strip whitespace and
+    # ignore an empty literal (args=[]).
+    dispatched_args = [a.strip() for a in args_literal.split(",") if a.strip()]
+    assert len(dispatched_args) == expected_arity, (
+        f"Dispatched {dispatched!r} with {len(dispatched_args)} positional "
+        f"args ({dispatched_args!r}) but task expects {expected_arity} "
+        f"({list(sig.parameters)!r})"
     )

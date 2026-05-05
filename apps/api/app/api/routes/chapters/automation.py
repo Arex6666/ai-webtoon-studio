@@ -137,29 +137,36 @@ async def confirm_assets(
     db.commit()
 
     # 自动渲染
-    render_job_id = None
+    render_job_ids: List[str] = []
     if request.auto_render:
-        # 触发批量渲染任务
         import uuid
 
-        render_job_id = str(uuid.uuid4())
-        job = RenderJob(
-            id=render_job_id,
-            chapter_id=chapter_id,
-            job_type="batch_render",
-            status="queued",
-            input_params={"render_first_frames": True}
-        )
-        db.add(job)
+        for panel_id in request.asset_bindings.keys():
+            panel = db.query(Panel).filter(Panel.id == panel_id).first()
+            if not panel:
+                continue
+            job = RenderJob(
+                id=str(uuid.uuid4()),
+                chapter_id=chapter_id,
+                panel_id=panel_id,
+                job_type="full_render",
+                status="queued",
+                input_params={
+                    "render_first_frames": True,
+                    "assets_lock": assets_lock,
+                },
+            )
+            db.add(job)
+            render_job_ids.append(job.id)
         db.commit()
 
-        # Dispatch batch render via Celery image worker
-        from app.celery_app import celery_app as _celery
-        _celery.send_task(
-            "app.workers.async_runner.execute_render_job_celery",
-            args=[render_job_id],
-            queue="image",
-        )
+        if render_job_ids:
+            from app.celery_app import celery_app as _celery
+            _celery.send_task(
+                "app.workers.async_runner.run_batch_render_task_celery",
+                args=[render_job_ids, 3],
+                queue="image",
+            )
 
     return {
         "success": True,
@@ -167,7 +174,8 @@ async def confirm_assets(
         "panels_updated": panels_updated,
         "locked_characters": len(characters_lock),
         "locked_scenes": len(scenes_lock),
-        "render_job_id": render_job_id
+        "render_job_ids": render_job_ids,
+        "render_job_id": render_job_ids[0] if render_job_ids else None,
     }
 
 
