@@ -129,9 +129,15 @@ class ComfyUIAdapter:
     ) -> Dict[str, str]:
         """
         获取生成结果并上传到存储
-        
+
         Returns:
-            {"full_url": "...", "manifest_url": "..."}
+            {"layerpack_id": "...", "full_url": "...", "full_key": "...",
+             "manifest_url": "..."}.
+
+            ``full_key`` is the raw MinIO storage key (e.g.
+            ``project/chapter/panel/attempt-001/full.png``); callers should
+            persist it on Panel.preview_key so readers can re-sign on demand
+            instead of caching the time-limited presigned ``full_url``.
         """
         # 获取输出图片
         outputs = await self.client.fetch_outputs(prompt_id)
@@ -188,6 +194,7 @@ class ComfyUIAdapter:
         return {
             "layerpack_id": layerpack_id,
             "full_url": full_url,
+            "full_key": full_key,
             "manifest_url": manifest_url,
         }
     
@@ -207,9 +214,10 @@ class ComfyUIAdapter:
     ) -> Dict[str, str]:
         """
         一站式生成：提交 → 等待 → 上传
-        
+
         Returns:
-            {"layerpack_id": "...", "full_url": "...", "manifest_url": "..."}
+            {"layerpack_id": "...", "full_url": "...", "full_key": "...",
+             "manifest_url": "..."}.
         """
         # 1. 提交任务
         prompt_id = await self.submit(

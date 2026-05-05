@@ -294,12 +294,18 @@ def execute_image_job(self, job_id: str, panel_id: str):
             status="completed",
             manifest_url=outputs.get("manifest_url"),
             full_url=outputs.get("full_url"),
+            file_full=outputs.get("full_key"),
             generation_params=job.inputs_json,
         )
         db.add(layerpack)
 
         panel.render_status = "rendered"
         panel.preview_url = outputs.get("full_url")
+        # When the provider exposes a raw storage key (currently ComfyUI),
+        # persist it so readers re-sign on demand instead of caching the
+        # presigned URL with its finite TTL. External-CDN providers (Tongyi,
+        # Doubao) leave this None; the resolver falls back to preview_url.
+        panel.preview_key = outputs.get("full_key")
         panel.active_layer_pack_id = layerpack.id
         db.commit()
 

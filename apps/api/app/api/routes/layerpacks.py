@@ -178,6 +178,7 @@ async def set_active_layerpack(
     # 更新 Panel 的激活 LayerPack
     panel.active_layer_pack_id = request.layerpack_id
     panel.preview_url = lp.full_url or lp.file_full
+    panel.preview_key = lp.file_full or None
     
     db.commit()
     
