@@ -10,6 +10,7 @@ from app.models.asset import Asset
 from app.models.chapter import Chapter
 from app.models.panel import Panel
 from app.models.user import User
+from app.services.storage.panel_preview import resolve_panel_preview_url
 
 router = APIRouter()
 
@@ -74,7 +75,7 @@ def get_asset_usage(
                     chapter_title=chapter_title_by_id.get(p.chapter_id),
                     panel_id=p.id,
                     panel_order=p.order_index or 0,
-                    panel_preview_url=p.preview_url,
+                    panel_preview_url=resolve_panel_preview_url(p),
                 )
             )
 

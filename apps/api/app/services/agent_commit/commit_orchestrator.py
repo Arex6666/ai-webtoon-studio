@@ -113,21 +113,14 @@ async def commit_agent_to_studio(
             except ImageFetchError as e:
                 warnings.append(f"panel #{agent_panel.order} preview failed: {e}")
 
-        # ``fetch_and_persist`` returns a raw MinIO storage key. The Panel
-        # model only has ``preview_url`` (no separate key column), and the
-        # frontend renders this directly as ``<img src>`` — so we must
-        # convert the key into a presigned URL before persisting. ``get_url``
-        # returns "" when the storage backend is unavailable; coerce that to
-        # ``None`` so the column stays NULL rather than an empty-string URL.
-        # TODO(commit_orchestrator): Panel.preview_url stores a presigned URL
-        # with a 7-day MinIO TTL (the maximum allowed). The following readers
-        # consume preview_url verbatim without re-signing, so the URL WILL
-        # break after 7 days:
-        #   - apps/api/app/services/export/bundle_builder.py
-        #   - apps/api/app/services/conversation/tool_handlers.py
-        #   - apps/api/app/workers/export_worker.py
-        # Architectural fix: add a separate ``Panel.preview_key`` column and
-        # re-sign on read. Tracked as a follow-up task.
+        # ``fetch_and_persist`` returns a raw MinIO storage key. Persist it on
+        # ``Panel.preview_key`` so readers (resolve_panel_preview_url) can
+        # re-sign on every fetch — the URL will never expire. We also still
+        # write a presigned ``preview_url`` for back-compat with code paths
+        # that read the column verbatim and haven't been migrated to the
+        # helper yet. ``storage_client.get_url`` returns "" when the storage
+        # backend is unavailable; coerce that to ``None`` so the legacy column
+        # stays NULL rather than an empty-string URL.
         preview_url = None
         if preview_key:
             signed = storage_client.get_url(preview_key, expires=604800)
@@ -138,7 +131,8 @@ async def commit_agent_to_studio(
             order_index=agent_panel.order if agent_panel.order is not None else idx,
             title=f"Panel {idx + 1}",
             summary=agent_panel.scene_description[:255] if agent_panel.scene_description else None,
-            spec_json=spec, render_status="draft", preview_url=preview_url,
+            spec_json=spec, render_status="draft",
+            preview_key=preview_key, preview_url=preview_url,
         )
         db.add(panel)
 

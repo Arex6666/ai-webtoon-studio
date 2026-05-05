@@ -13,6 +13,7 @@ from app.models.render_job import RenderJob
 from app.models.prop_asset import PropAsset
 from app.api.deps import get_current_user
 from app.models.user import User
+from app.services.storage.panel_preview import resolve_panel_preview_url
 
 router = APIRouter()
 
@@ -161,7 +162,7 @@ async def get_chapter_studio(
             "order_index": p.order_index,
             "title": p.title,
             "summary": p.summary or spec.get("shot", {}).get("description", "") or spec.get("shot_description", "") or spec.get("action_description", "") or spec.get("meta", {}).get("description", ""),
-            "preview_url": p.preview_url,
+            "preview_url": resolve_panel_preview_url(p),
             "render_status": p.render_status,
             "typeset_status": p.typeset_status,
             "qa_score": p.qa_score,
@@ -193,7 +194,7 @@ async def get_chapter_studio(
             "spec_json": p.spec_json or {},
             "render_status": p.render_status,
             "active_layer_pack_id": p.active_layer_pack_id,
-            "preview_url": p.preview_url,
+            "preview_url": resolve_panel_preview_url(p),
             "typeset_status": p.typeset_status,
             "typeset_image_url": p.typeset_image_url,
             "qa_score": p.qa_score,

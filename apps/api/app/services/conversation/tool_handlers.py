@@ -494,7 +494,8 @@ class ToolHandlers:
                 }
 
             # 优先使用排版后图片, 否则使用渲染预览图
-            image_url = panel.typeset_image_url or panel.preview_url
+            from app.services.storage.panel_preview import resolve_panel_preview_url
+            image_url = panel.typeset_image_url or resolve_panel_preview_url(panel)
             if not image_url:
                 return {
                     "success": False,
