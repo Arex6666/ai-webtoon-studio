@@ -7,16 +7,6 @@ absorbs it so subsequent imports (cached partial module) succeed.
 import pytest
 
 
-def _warmup_app_import() -> None:
-    try:
-        from app.main import app  # noqa: F401
-    except Exception:
-        pass
-
-
-_warmup_app_import()
-
-
 @pytest.mark.parametrize("key", [
     "agent-commit/proj1/panel-1.png",
     "agent_commit/proj1/panel-1.png",

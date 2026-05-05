@@ -9,16 +9,6 @@ breaking project-scoped reporting downstream.
 import inspect
 
 
-def _warmup_app_import() -> None:
-    try:
-        from app.main import app  # noqa: F401
-    except Exception:
-        pass
-
-
-_warmup_app_import()
-
-
 def test_qa_fix_does_not_read_panel_project_id():
     from app.api.routes import qa_fix
     src = inspect.getsource(qa_fix)

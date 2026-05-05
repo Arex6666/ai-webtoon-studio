@@ -3,17 +3,6 @@ import inspect
 import re
 
 
-def _warmup_app_import():
-    """Absorb pre-existing ImportError (subtitle_provider). Remove after task #9."""
-    try:
-        from app.main import app  # noqa: F401
-    except Exception:
-        pass
-
-
-_warmup_app_import()
-
-
 def test_no_module_accesses_timeline_project_id():
     """Bug #3: Timeline has no project_id; no production code may access it."""
     from app.api.routes import jobs as jobs_route

@@ -11,16 +11,6 @@ Must use ``is not None``.
 import inspect
 
 
-def _warmup_app_import() -> None:
-    try:
-        from app.main import app  # noqa: F401
-    except Exception:
-        pass
-
-
-_warmup_app_import()
-
-
 def test_order_zero_preserved():
     """Bug #15: order=0 must be preserved, not overwritten with idx via truthy check."""
     from app.services.agent_commit import commit_orchestrator

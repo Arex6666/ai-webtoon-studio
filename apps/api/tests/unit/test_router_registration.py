@@ -14,23 +14,6 @@ import re
 import pytest
 
 
-def _warmup_app_import() -> None:
-    """Pre-existing repo-wide quirk: the very first ``from app.main import app``
-    in a fresh interpreter raises ``ImportError: cannot import name
-    'get_llm_service' from 'app.services.brain.standard_llm'`` (a separate
-    bug in this PR's batch). Subsequent imports succeed because Python caches
-    the partial module. We swallow that initial failure here so the router
-    registration assertions below can run deterministically.
-    """
-    try:
-        from app.main import app  # noqa: F401
-    except Exception:
-        pass
-
-
-_warmup_app_import()
-
-
 # Each entry: (label, substring that must appear in at least one route path).
 # Substrings include the ``/api/v1/`` prefix to avoid false positives from
 # other routers whose paths contain the same word (e.g. ``/shot-versions``

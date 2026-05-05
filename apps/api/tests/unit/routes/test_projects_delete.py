@@ -18,16 +18,6 @@ delete logic colocated with the schema.
 import inspect
 
 
-def _warmup_app_import() -> None:
-    try:
-        from app.main import app  # noqa: F401
-    except Exception:
-        pass
-
-
-_warmup_app_import()
-
-
 def test_delete_project_relies_on_orm_cascade():
     from app.api.routes import projects as projects_route
     src = inspect.getsource(projects_route.delete_project)

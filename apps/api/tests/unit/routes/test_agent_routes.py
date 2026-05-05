@@ -17,16 +17,6 @@ import inspect
 import re
 
 
-def _warmup_app_import() -> None:
-    try:
-        from app.main import app  # noqa: F401
-    except Exception:
-        pass
-
-
-_warmup_app_import()
-
-
 # ---------------------------------------------------------------------------
 # #20 — dead Episode1Response card writes
 # ---------------------------------------------------------------------------

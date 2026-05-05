@@ -2,16 +2,6 @@
 import inspect
 
 
-def _warmup_app_import():
-    try:
-        from app.main import app  # noqa: F401
-    except Exception:
-        pass
-
-
-_warmup_app_import()
-
-
 def test_no_db_session_kwarg_in_delay():
     from app.api.routes.assets import characters
     src = inspect.getsource(characters)

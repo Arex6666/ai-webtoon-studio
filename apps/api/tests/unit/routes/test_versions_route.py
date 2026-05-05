@@ -18,23 +18,6 @@ import inspect
 import re
 
 
-def _warmup_app_import() -> None:
-    """Absorb pre-existing ImportError (subtitle_provider). Remove after task #9.
-
-    See ``tests/unit/test_router_registration.py`` for the full story —
-    the very first ``from app.main import app`` in a fresh interpreter
-    raises ``ImportError`` due to a separate, unrelated bug. Subsequent
-    imports succeed because Python caches the partial module.
-    """
-    try:
-        from app.main import app  # noqa: F401
-    except Exception:
-        pass
-
-
-_warmup_app_import()
-
-
 from app.services.graph.version_manager import VersionManager  # noqa: E402
 from app.api.routes import versions as versions_route  # noqa: E402
 

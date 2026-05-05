@@ -18,16 +18,6 @@ either by enforcing that any in-source post-filter on
 import inspect
 
 
-def _warmup_app_import() -> None:
-    try:
-        from app.main import app  # noqa: F401
-    except Exception:
-        pass
-
-
-_warmup_app_import()
-
-
 def test_filter_runs_before_limit_in_query():
     from app.api.routes import episode_video
     src = inspect.getsource(episode_video.list_episode_video_jobs)
