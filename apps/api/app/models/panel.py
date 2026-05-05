@@ -37,9 +37,13 @@ class Panel(Base, TimestampMixin):
     # 当前使用的图层包 ID
     active_layer_pack_id = Column(String(36), nullable=True)
 
-    # 预览 URL
+    # 预览 URL (legacy: presigned URL with finite TTL — kept for back-compat).
     preview_url = Column(String(512), nullable=True)
-    
+    # Raw storage key (e.g. MinIO object key) — readers re-sign on demand so
+    # links don't expire. Prefer this over preview_url when set.
+    preview_key = Column(String(512), nullable=True)
+
+
     # 嵌字状态
     typeset_status = Column(String(50), default="pending")  # pending/processing/completed/failed
     typeset_image_url = Column(String(512), nullable=True)
