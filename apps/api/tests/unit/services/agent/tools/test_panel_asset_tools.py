@@ -50,6 +50,102 @@ def test_create_scene_metadata():
     import app.services.agent.tools.create_scene as m
     assert m.tool.name == "create_scene"
     assert m.tool.requires_context == ("project_id",)
+    schema = m.tool.json_schema
+    assert "name" in schema["required"]
+    assert "description" in schema["required"]
+
+
+@pytest.mark.asyncio
+async def test_create_scene_requires_db():
+    import app.services.agent.tools.create_scene as m
+    out = await m.handle(
+        {"name": "Forest", "description": "deep woods"},
+        {"project_id": "p"},
+        db=None, tracer=None,
+    )
+    assert "error" in out
+
+
+@pytest.mark.asyncio
+async def test_create_scene_inserts_and_dispatches(monkeypatch):
+    """Inserts an Asset row with type='scene' and dispatches anchor gen."""
+    from unittest.mock import MagicMock
+    import app.services.agent.tools.create_scene as m
+    from app.workers import async_runner as ar_mod
+
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = None
+
+    added = []
+    db.add.side_effect = lambda obj: added.append(obj)
+
+    delay_calls = {}
+
+    def fake_delay(**kwargs):
+        delay_calls.update(kwargs)
+
+        class _R:
+            id = "task-anchor-1"
+        return _R()
+
+    monkeypatch.setattr(ar_mod.run_scene_anchor_generation, "delay", fake_delay)
+
+    out = await m.handle(
+        {
+            "name": "Forest",
+            "description": "ancient oak woods",
+            "location": "woods",
+            "time_of_day": "dusk",
+            "mood": "mysterious",
+        },
+        {"project_id": "p"},
+        db=db, tracer=None,
+    )
+    assert out["success"] is True
+    assert out["status"] == "created"
+    assert out["dispatched"]["task_id"] == "task-anchor-1"
+    assert len(added) == 1
+    asset = added[0]
+    assert asset.project_id == "p"
+    assert asset.type == "scene"
+    assert asset.name == "Forest"
+    assert asset.data_json["location"] == "woods"
+    assert asset.data_json["time_of_day"] == "dusk"
+    assert asset.data_json["anchor_status"] == "generating"
+    assert delay_calls["scene_id"] == asset.id
+    assert delay_calls["scene_name"] == "Forest"
+    assert delay_calls["location"] == "woods"
+    assert delay_calls["mood"] == "mysterious"
+
+
+@pytest.mark.asyncio
+async def test_create_scene_idempotent_on_name(monkeypatch):
+    """Second call with same name returns the existing asset id, no dispatch."""
+    from unittest.mock import MagicMock
+    import app.services.agent.tools.create_scene as m
+    from app.workers import async_runner as ar_mod
+
+    fake_existing = MagicMock()
+    fake_existing.id = "scene-existing"
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = fake_existing
+
+    delay_called = {"v": False}
+
+    def fake_delay(**kwargs):
+        delay_called["v"] = True
+
+    monkeypatch.setattr(ar_mod.run_scene_anchor_generation, "delay", fake_delay)
+
+    out = await m.handle(
+        {"name": "Forest", "description": "x"},
+        {"project_id": "p"},
+        db=db, tracer=None,
+    )
+    assert out["success"] is True
+    assert out["asset_id"] == "scene-existing"
+    assert out["status"] == "already_exists"
+    assert delay_called["v"] is False
 
 
 @pytest.mark.asyncio
