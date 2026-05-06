@@ -832,128 +832,67 @@ async def generate_panel_images(
     episode_number: int,
     req: GeneratePanelsRequest,
 ):
-    """用户确认角色/场景后，为每个分镜生成首帧图。"""
-    provider = get_doubao_image_provider()
-    if not provider:
-        raise HTTPException(status_code=503, detail="Image provider not available (no API key configured)")
+    """用户确认角色/场景后，为每个分镜生成首帧图。
 
-    # 构建查找表
-    char_prompt_map = {c.name: c.visual_prompt for c in req.characters if c.visual_prompt}
-    scene_prompt_map = {s.name: s.visual_prompt for s in req.scenes if s.visual_prompt}
-    art_style_hint = f"{req.art_style.base_style}, {req.art_style.color_tone}, {req.art_style.atmosphere}"
+    Thin wrapper around
+    ``app.services.agent_commit.panel_generation`` — orchestration logic
+    was extracted in B-1 Phase C so the ``generate_panels`` agent tool
+    and this endpoint share one code path.
+    """
+    if not get_doubao_image_provider():
+        raise HTTPException(
+            status_code=503,
+            detail="Image provider not available (no API key configured)",
+        )
 
-    semaphore = asyncio.Semaphore(5)
+    from app.services.agent_commit.panel_generation import (
+        generate_panel_images_for_payload,
+        write_panels_card,
+    )
 
-    async def generate_one(panel: PanelInput) -> PanelResult:
-        async with semaphore:
-            try:
-                scene_part = scene_prompt_map.get(panel.scene_name, panel.scene_name or "")
-                char_parts = [char_prompt_map.get(cn, cn) for cn in panel.characters]
-                char_part = ", ".join(char_parts) if char_parts else ""
-
-                parts = [
-                    art_style_hint,
-                    scene_part,
-                    char_part,
-                    panel.scene_description,
-                    panel.composition,
-                    "high quality, detailed, anime illustration",
-                ]
-                prompt = ", ".join(p for p in parts if p)
-
-                request = DoubaoImageRequest(
-                    prompt=prompt,
-                    negative_prompt="low quality, blurry, distorted, deformed, ugly, text, watermark",
-                    width=1280,
-                    height=720,
-                )
-                result = await provider.generate(request)
-                if not (result.success and result.image_url):
-                    return PanelResult(
-                        id=panel.id,
-                        status="failed",
-                        error=result.error or "Generation returned no image",
-                    )
-
-                # Persist Doubao temp URL to MinIO immediately so downstream
-                # consumers (commit-to-studio, asset hub) can rely on the key.
-                try:
-                    from app.services.agent_commit.image_fetcher import (
-                        fetch_and_persist,
-                        ImageFetchError,
-                    )
-                    project_id_for_path = getattr(req, "project_id", None) or "unknown"
-                    minio_key = await fetch_and_persist(
-                        result.image_url,
-                        project_id=project_id_for_path,
-                        asset_type="panel",
-                        name_hint=f"ep{episode_number}-p{panel.id}",
-                    )
-                    return PanelResult(id=panel.id, image_url=minio_key, status="success")
-                except ImageFetchError as persist_err:
-                    logger.warning(
-                        f"[Episode {episode_number}] Panel '{panel.id}' MinIO persist failed; "
-                        f"returning temp URL: {persist_err}"
-                    )
-                    return PanelResult(
-                        id=panel.id,
-                        image_url=result.image_url,
-                        status="success",
-                        error=f"minio persist failed: {persist_err}",
-                    )
-            except Exception as e:
-                logger.warning(f"[Episode {episode_number}] Panel '{panel.id}' image failed: {e}")
-                return PanelResult(id=panel.id, status="failed", error=str(e))
-
-    results = await asyncio.gather(*[generate_one(p) for p in req.panels], return_exceptions=True)
-    panel_results = []
-    for i, r in enumerate(results):
-        if isinstance(r, PanelResult):
-            panel_results.append(r)
-        else:
-            panel_results.append(PanelResult(id=req.panels[i].id, status="failed", error=str(r)))
+    panel_results = await generate_panel_images_for_payload(
+        episode_number=episode_number,
+        project_id=getattr(req, "project_id", None),
+        art_style={
+            "base_style": req.art_style.base_style,
+            "color_tone": req.art_style.color_tone,
+            "atmosphere": req.art_style.atmosphere,
+        },
+        characters=[c.model_dump() for c in req.characters],
+        scenes=[s.model_dump() for s in req.scenes],
+        panels=[p.model_dump() for p in req.panels],
+    )
 
     # Persist to conversation as `panels` card for later lean-payload commit
     conversation_id = getattr(req, "conversation_id", None)
     if conversation_id:
+        from app.core.database import SessionLocal
+
+        db = SessionLocal()
         try:
-            from app.services.agent_commit.card_writer import upsert_card, build_panels_card
-            from app.core.database import SessionLocal
-
-            result_by_id = {r.id: r for r in panel_results}
-            merged_panels = []
-            for p in req.panels:
-                r = result_by_id.get(p.id)
-                merged_panels.append({
-                    "id": p.id,
-                    "order": getattr(p, "order", None),
-                    "scene_name": p.scene_name,
-                    "characters": p.characters,
-                    "scene_description": p.scene_description,
-                    "dialogue": getattr(p, "dialogue", None),
-                    "shot_type": getattr(p, "shot_type", "MS"),
-                    "camera_angle": getattr(p, "camera_angle", "eye-level"),
-                    "emotion": getattr(p, "emotion", None),
-                    "composition": p.composition,
-                    "image_url": r.image_url if r and r.status == "success" else None,
-                })
-
-            db = SessionLocal()
+            write_panels_card(
+                db,
+                conversation_id=conversation_id,
+                episode_number=episode_number,
+                panel_inputs=[p.model_dump() for p in req.panels],
+                results=panel_results,
+            )
+            db.commit()
+        except Exception as e:  # noqa: BLE001 — best-effort
+            logger.warning("Failed to write panels card: %s", e)
             try:
-                success_count = sum(1 for r in panel_results if r.status == "success")
-                upsert_card(
-                    db, conversation_id, "panels",
-                    build_panels_card(merged_panels),
-                    episode_number=episode_number,
-                    content_text=f"[panels card · ep{episode_number} · {success_count}/{len(panel_results)} ready]",
-                )
-                db.commit()
-            finally:
-                db.close()
-        except Exception as e:
-            logger.warning(f"Failed to write panels card: {e}")
+                db.rollback()
+            except Exception:  # noqa: BLE001
+                pass
+        finally:
+            db.close()
 
-    return GeneratePanelsResponse(panels=panel_results)
+    return GeneratePanelsResponse(panels=[
+        PanelResult(
+            id=r.id, image_url=r.image_url, status=r.status, error=r.error,
+        )
+        for r in panel_results
+    ])
 
 
 # ============ 对话式改进 API ============
