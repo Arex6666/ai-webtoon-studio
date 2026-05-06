@@ -40,16 +40,17 @@ class ChatRequest(BaseModel):
 
 @router.post("/chat")
 async def chat(req: ChatRequest, db: Session = Depends(get_db)):
-    # Get or create conversation
+    # Get or create conversation. If client sent a conversation_id we don't have
+    # (e.g. their previous attempt failed before the row committed), create a
+    # NEW conversation rather than 404 — friendlier UX, agent loop is idempotent.
+    conv = None
     if req.conversation_id:
         conv = db.query(Conversation).filter_by(id=req.conversation_id).first()
-        if not conv:
-            raise HTTPException(404, "Conversation not found")
-        if conv.agent_state == "running":
+        if conv and conv.agent_state == "running":
             raise HTTPException(409, "Conversation has an active agent loop (CONVERSATION_BUSY)")
-    else:
+    if conv is None:
         conv = Conversation(
-            id=str(uuid.uuid4()),
+            id=req.conversation_id or str(uuid.uuid4()),
             project_id=req.context.project_id,
             episode_number=req.context.episode_number,
             chapter_id=req.context.chapter_id,

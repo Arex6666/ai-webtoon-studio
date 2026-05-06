@@ -22,7 +22,7 @@ async def handle(args: dict, context: dict, db, tracer) -> dict:
         return {"error": "episode_number required (in args or context)"}
     chapter = (
         db.query(Chapter)
-        .filter(Chapter.project_id == project_id, Chapter.order == ep)
+        .filter(Chapter.project_id == project_id, Chapter.order_index == ep)
         .first()
     )
     if not chapter:
@@ -30,7 +30,7 @@ async def handle(args: dict, context: dict, db, tracer) -> dict:
     panels = (
         db.query(Panel)
         .filter(Panel.chapter_id == chapter.id)
-        .order_by(Panel.order)
+        .order_by(Panel.order_index)
         .all()
     )
     return {
@@ -38,7 +38,7 @@ async def handle(args: dict, context: dict, db, tracer) -> dict:
         "panels": [
             {
                 "id": p.id,
-                "order": p.order,
+                "order": p.order_index,
                 "preview_url": getattr(p, "preview_url", None),
             }
             for p in panels

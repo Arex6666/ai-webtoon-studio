@@ -173,13 +173,17 @@ class AgentRunner:
                 )
                 had_tool_results = True
 
-                # Insert tool results back into history as role=tool messages so the LLM sees them next step
+                # Insert tool results back into history as role=tool messages so the LLM sees them next step.
+                # Persist the tool_call_id + name into tool_calls_json so _load_history can
+                # reconstruct the OpenAI-spec required `tool_call_id` field on the LLMMessage —
+                # Doubao/OpenAI/etc reject role=tool messages without a tool_call_id.
                 for tc, r in zip(tool_calls, results):
                     tool_msg = ConversationMessage(
                         id=str(uuid.uuid4()),
                         conversation_id=conversation_id,
                         role="tool",
                         content=json.dumps(r, ensure_ascii=False, default=str),
+                        tool_calls_json=[{"id": tc.id, "name": tc.name}],
                         trace_id=tracer.trace_id,
                     )
                     self.db.add(tool_msg)
@@ -350,6 +354,19 @@ class AgentRunner:
         )
         out: list[LLMMessage] = []
         for r in rows:
+            # Tool messages: extract tool_call_id + name from tool_calls_json[0]
+            # so the OpenAI-spec required `tool_call_id` survives the round-trip.
+            if r.role == "tool":
+                tc_meta = (r.tool_calls_json or [{}])[0] if r.tool_calls_json else {}
+                out.append(LLMMessage(
+                    role="tool",
+                    content=r.content or "",
+                    tool_call_id=tc_meta.get("id"),
+                    name=tc_meta.get("name"),
+                ))
+                continue
+
+            # Assistant messages with tool_calls — reconstruct ToolCallSpec list
             tool_calls = None
             if r.tool_calls_json:
                 tool_calls = []

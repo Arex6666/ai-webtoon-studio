@@ -16,7 +16,7 @@ async def handle(args: dict, context: dict, db, tracer) -> dict:
     chapters = (
         db.query(Chapter)
         .filter(Chapter.project_id == project_id)
-        .order_by(Chapter.order)
+        .order_by(Chapter.order_index)
         .limit(args.get("limit", 100))
         .all()
     )
@@ -26,7 +26,7 @@ async def handle(args: dict, context: dict, db, tracer) -> dict:
             {
                 "id": c.id,
                 "title": c.title,
-                "order": c.order,
+                "order": c.order_index,
                 "status": getattr(c, "status", None),
             }
             for c in chapters
