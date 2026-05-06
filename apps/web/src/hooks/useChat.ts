@@ -275,7 +275,11 @@ export function useChat(opts: UseChatOptions): UseChatResult {
         }
       } catch (e: unknown) {
         if (ctrl.signal.aborted) {
-          // local abort — leave state alone, server-side cancel already issued
+          // Local abort — backend may or may not have processed /cancel yet.
+          // Optimistically transition agentState so the UI reflects the cancellation
+          // without waiting for the server-side agent_done event (which our reader
+          // already disconnected from).
+          dispatch({ type: 'apply_event', event: { type: 'agent_done', reason: 'user_canceled' } });
         } else {
           const msg = e instanceof Error ? e.message : String(e);
           dispatch({ type: 'set_error', err: { code: 'NETWORK_ERROR', message: msg, recoverable: false } });

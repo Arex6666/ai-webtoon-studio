@@ -165,6 +165,10 @@ class AgentRunner:
                 self.db.add(msg)
                 self.db.commit()
 
+                # Mid-stream user cancel detected by _call_llm — short-circuit out.
+                if finish_reason == "user_canceled":
+                    return "user_canceled"
+
                 if not tool_calls:
                     return "stop"
 
@@ -215,12 +219,25 @@ class AgentRunner:
             finish_reason = "stop"
             assistant_msg_id = str(uuid.uuid4())
 
+            # Periodic cancel check inside the streaming loop so the user can
+            # interrupt mid-stream (not just at step boundaries). Check every
+            # ~16 content deltas (≈1 cancel-check per token-burst, low overhead).
+            chunks_since_cancel_check = 0
+            cancel_check_interval = 16
+
             async for chunk in self.provider.stream(
                 system=full_system,
                 messages=history,
                 tools=tools,
                 model=model,
             ):
+                chunks_since_cancel_check += 1
+                if chunks_since_cancel_check >= cancel_check_interval:
+                    chunks_since_cancel_check = 0
+                    if await is_canceled(conversation_id):
+                        finish_reason = "user_canceled"
+                        break
+
                 if chunk.type == "content_delta" and chunk.delta:
                     assistant_text += chunk.delta
                     await DISPATCHER.emit(conversation_id, "assistant_message_chunk", {
