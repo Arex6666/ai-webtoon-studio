@@ -24,9 +24,9 @@ from app.services.agent.tools import create_character        # noqa: F401
 from app.services.agent.tools import create_scene            # noqa: F401
 
 # Render/QA tools (batch 4)
-# from app.services.agent.tools import render_panels
-# from app.services.agent.tools import analyze_quality
-# from app.services.agent.tools import suggest_fixes
+from app.services.agent.tools import render_panels       # noqa: F401
+from app.services.agent.tools import analyze_quality     # noqa: F401
+from app.services.agent.tools import suggest_fixes       # noqa: F401
 
 # Studio commit (batch 5)
 # from app.services.agent.tools import commit_to_studio
