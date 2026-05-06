@@ -117,8 +117,13 @@ async def generate_scene_anchor(
     
     if provider == "mock":
         return await _generate_mock(spec, seed)
+    elif provider == "doubao":
+        return await _generate_doubao_seedream(spec, positive, negative, size, seed)
     elif provider == "comfyui":
-        return await _generate_comfyui(spec, positive, negative, size, seed, output_dir)
+        # ComfyUI path is deferred until home-GPU deployment (B-1 Phase A territory).
+        # Fall through to Doubao for safety.
+        logger.warning("[SceneAnchor] ComfyUI not implemented, falling back to doubao")
+        return await _generate_doubao_seedream(spec, positive, negative, size, seed)
     else:
         return AnchorResult(success=False, error=f"Unknown provider: {provider}")
 
@@ -142,16 +147,106 @@ async def _generate_mock(spec: SceneAnchorSpec, seed: int) -> AnchorResult:
     )
 
 
-async def _generate_comfyui(
+async def _generate_doubao_seedream(
     spec: SceneAnchorSpec,
     positive: str,
     negative: str,
     size: tuple[int, int],
     seed: int,
-    output_dir: Optional[str]
 ) -> AnchorResult:
-    """ComfyUI 生成器"""
-    # TODO: 实现真实的 ComfyUI 调用
-    # 目前先使用 Mock
-    logger.warning("[SceneAnchor] ComfyUI not implemented, falling back to mock")
-    return await _generate_mock(spec, seed)
+    """Generate scene anchor via Doubao Seedream 4.5 + re-store under the
+    canonical AnchorStorage path.
+
+    The provider already persists the image under the `images/` MinIO prefix.
+    We re-save under `anchors/scenes/{scene_id}/anchor.png` to give the scene
+    its canonical address.
+    """
+    from app.services.layer_factory.doubao_image_provider import (
+        get_doubao_image_provider, DoubaoImageRequest, SEEDREAM_MODEL,
+    )
+    from app.services.scene_anchor.anchor_storage import get_anchor_storage
+    from app.core.storage import get_storage_client
+
+    provider = get_doubao_image_provider()
+    if not provider.api_key:
+        return AnchorResult(
+            success=False,
+            error="ARK_API_KEY / DOUBAO_API_KEY not configured",
+        )
+
+    width, height = _enforce_seedream_min_pixels(size)
+
+    req = DoubaoImageRequest(
+        prompt=positive,
+        negative_prompt=negative,
+        width=width,
+        height=height,
+        seed=seed,
+    )
+
+    try:
+        resp = await provider.generate(req)
+    except Exception as e:
+        logger.exception("[SceneAnchor] Seedream call raised")
+        return AnchorResult(success=False, error=f"Seedream call raised: {e!r}")
+
+    if not resp.success:
+        return AnchorResult(
+            success=False,
+            error=resp.error or "Seedream generation failed",
+        )
+
+    # Resolve image bytes — provider may have persisted bytes inline OR returned
+    # a storage key OR returned an http(s) URL (fallback when persist failed).
+    image_bytes = resp.image_data
+    if image_bytes is None and resp.image_url:
+        if resp.image_url.startswith(("http://", "https://")):
+            import httpx
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    r = await client.get(resp.image_url)
+                    r.raise_for_status()
+                    image_bytes = r.content
+            except Exception as e:
+                logger.exception("[SceneAnchor] Failed to download Seedream temp URL")
+                return AnchorResult(success=False, error=f"download failed: {e!r}")
+        else:
+            try:
+                sc = get_storage_client()
+                image_bytes = await sc.download_bytes(resp.image_url)
+            except Exception as e:
+                logger.exception("[SceneAnchor] Failed to fetch persisted Seedream bytes")
+                return AnchorResult(success=False, error=f"storage fetch failed: {e!r}")
+
+    if not image_bytes:
+        return AnchorResult(
+            success=False,
+            error="Seedream returned neither image_data nor a usable image_url",
+        )
+
+    storage = get_anchor_storage()
+    paths = await storage.save_anchor(
+        scene_id=spec.scene_id,
+        anchor_image=image_bytes,
+        control_maps={},
+        metadata={
+            "prompt": positive,
+            "negative_prompt": negative,
+            "seed": seed,
+            "provider": "doubao-seedream",
+            "model": SEEDREAM_MODEL,
+            "size": [width, height],
+        },
+    )
+
+    return AnchorResult(
+        success=True,
+        image_path=paths["anchor"],
+        image_url=storage.get_anchor_url(spec.scene_id),
+        meta={
+            "seed": seed,
+            "provider": "doubao-seedream",
+            "model": SEEDREAM_MODEL,
+            "prompt_hash": hash(positive),
+        },
+    )
