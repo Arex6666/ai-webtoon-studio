@@ -32,6 +32,11 @@ class ConversationMessage(Base, TimestampMixin):
     tokens_used = Column(Integer, nullable=False, default=0)
     latency_ms = Column(Integer, nullable=True)  # 响应延迟（毫秒）
 
+    # B-1 tracing + finish reason
+    trace_id = Column(String(64), nullable=True, index=True)
+    finish_reason = Column(String(32), nullable=True)
+    # finish_reason values: stop | tool_calls | length | content_filter | error
+
     # 关系
     conversation = relationship("Conversation", back_populates="messages")
     triggered_actions = relationship("ConversationAction", back_populates="message")
