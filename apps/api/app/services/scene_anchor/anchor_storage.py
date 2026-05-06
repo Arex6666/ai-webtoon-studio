@@ -108,7 +108,23 @@ class AnchorStorage:
         except Exception as e:
             logger.error(f"Failed to save anchor for {scene_id}: {e}")
             raise
-    
+
+    async def save_control_map(self, scene_id: str, map_type: str, data: bytes) -> str:
+        """Upload a single control map PNG to MinIO. Returns the storage path.
+
+        Used when control maps are extracted incrementally (one map at a time)
+        rather than batched up-front. Counterpart to the all-in-one save_anchor.
+        """
+        storage = self._get_storage()
+        path = self._get_control_map_path(scene_id, map_type)
+        await storage.upload_bytes(
+            path=path,
+            data=data,
+            content_type="image/png",
+        )
+        logger.info(f"Saved {map_type} control map for scene {scene_id}")
+        return path
+
     async def load_anchor_image(self, scene_id: str) -> Optional[bytes]:
         """加载空镜图像"""
         storage = self._get_storage()
