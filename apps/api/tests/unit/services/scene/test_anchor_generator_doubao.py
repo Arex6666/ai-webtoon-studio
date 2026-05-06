@@ -74,3 +74,76 @@ async def test_generate_doubao_seedream_happy_path(monkeypatch):
     assert isinstance(save_call.kwargs["anchor_image"], bytes)
     assert save_call.kwargs["control_maps"] == {}
     assert save_call.kwargs["metadata"]["seed"] == 12345
+
+
+@pytest.mark.asyncio
+async def test_generate_doubao_seedream_no_api_key():
+    spec = SceneAnchorSpec(scene_id="x", name="test")
+    fake_provider = MagicMock()
+    fake_provider.api_key = None
+
+    with patch("app.services.layer_factory.doubao_image_provider.get_doubao_image_provider", return_value=fake_provider):
+        result = await _generate_doubao_seedream(spec, "p", "n", (1920, 1920), 1)
+
+    assert result.success is False
+    assert "ARK_API_KEY" in result.error or "DOUBAO_API_KEY" in result.error
+
+
+@pytest.mark.asyncio
+async def test_generate_doubao_seedream_provider_failure():
+    spec = SceneAnchorSpec(scene_id="x", name="test")
+    fake_provider = MagicMock()
+    fake_provider.api_key = "k"
+    fake_provider.generate = AsyncMock(return_value=MagicMock(
+        success=False, error="rate limited", error_code="429",
+        image_data=None, image_url=None,
+    ))
+
+    with patch("app.services.layer_factory.doubao_image_provider.get_doubao_image_provider", return_value=fake_provider):
+        result = await _generate_doubao_seedream(spec, "p", "n", (1920, 1920), 1)
+
+    assert result.success is False
+    assert "rate limited" in (result.error or "")
+
+
+@pytest.mark.asyncio
+async def test_generate_doubao_seedream_resolves_image_url_minio_key(monkeypatch):
+    """When image_data is None but image_url is a MinIO key (no http://), fetch via storage."""
+    spec = SceneAnchorSpec(scene_id="scene-1", name="test")
+
+    fake_provider = MagicMock()
+    fake_provider.api_key = "k"
+    fake_provider.generate = AsyncMock(return_value=MagicMock(
+        success=True, image_data=None, image_url="images/persisted.jpg", error=None,
+    ))
+
+    fake_sc = MagicMock()
+    fake_sc.download_bytes = AsyncMock(return_value=make_test_png_bytes())
+
+    fake_anchor_storage = MagicMock()
+    fake_anchor_storage.save_anchor = AsyncMock(return_value={"anchor": "anchors/scenes/scene-1/anchor.png"})
+    fake_anchor_storage.get_anchor_url = MagicMock(return_value="http://minio/anchor.png")
+
+    with patch("app.services.layer_factory.doubao_image_provider.get_doubao_image_provider", return_value=fake_provider), \
+         patch("app.services.scene_anchor.anchor_storage.get_anchor_storage", return_value=fake_anchor_storage), \
+         patch("app.core.storage.get_storage_client", return_value=fake_sc):
+        result = await _generate_doubao_seedream(spec, "p", "n", (1920, 1920), 1)
+
+    assert result.success is True
+    fake_sc.download_bytes.assert_awaited_once_with("images/persisted.jpg")
+
+
+@pytest.mark.asyncio
+async def test_generate_doubao_seedream_no_bytes_no_url():
+    spec = SceneAnchorSpec(scene_id="x", name="test")
+    fake_provider = MagicMock()
+    fake_provider.api_key = "k"
+    fake_provider.generate = AsyncMock(return_value=MagicMock(
+        success=True, image_data=None, image_url=None, error=None,
+    ))
+
+    with patch("app.services.layer_factory.doubao_image_provider.get_doubao_image_provider", return_value=fake_provider):
+        result = await _generate_doubao_seedream(spec, "p", "n", (1920, 1920), 1)
+
+    assert result.success is False
+    assert "image_data" in result.error or "image_url" in result.error or "neither" in result.error.lower()
