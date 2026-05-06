@@ -1,0 +1,12 @@
+name: webtoon-render-strategy
+version: 1.0.0
+description: Guides render decisions — batch vs single panel, seed/denoise tuning per failure mode, cost-aware ordering.
+author: Webtoon Studio Team
+license: MIT
+
+activation:
+  intent_keywords: [渲染, render, 出图, 批量, batch, generate panel image, regenerate]
+  context_required: [project_id]
+  context_optional: [episode_number]
+
+scope_default: global

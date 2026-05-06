@@ -1,0 +1,11 @@
+name: webtoon-character-design
+version: 1.0.0
+description: Guides creation of character assets — sheet construction, FaceID reference selection, outfit variants, and consistency strategies.
+author: Webtoon Studio Team
+license: MIT
+
+activation:
+  intent_keywords: [角色, character, 人物, 主角, 配角, persona, casting]
+  context_required: [project_id]
+
+scope_default: global

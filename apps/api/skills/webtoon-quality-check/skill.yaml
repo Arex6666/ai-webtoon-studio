@@ -1,0 +1,12 @@
+name: webtoon-quality-check
+version: 1.0.0
+description: Decision tree for QA failures — when to call analyze_quality, how to read drift / style scores, and when to apply each FixPlan strategy.
+author: Webtoon Studio Team
+license: MIT
+
+activation:
+  intent_keywords: [quality, QA, 质量, 检查, drift, fix, 修复]
+  context_required: [project_id]
+  context_optional: [panel_id]
+
+scope_default: global

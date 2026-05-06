@@ -1,0 +1,12 @@
+name: webtoon-storyboard-design
+version: 1.0.0
+description: Guides agent through breaking user stories into webtoon panels with framing, dialogue, and pacing notes.
+author: Webtoon Studio Team
+license: MIT
+
+activation:
+  intent_keywords: [分镜, storyboard, 分格, panel breakdown, 分面板, 面板分解]
+  context_required: [project_id]
+  context_optional: [episode_number]
+
+scope_default: global

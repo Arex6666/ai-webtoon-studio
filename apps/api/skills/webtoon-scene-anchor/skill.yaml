@@ -1,0 +1,11 @@
+name: webtoon-scene-anchor
+version: 1.0.0
+description: Guides scene background creation — anchor image generation, ControlNet maps, reuse across panels in the same setting.
+author: Webtoon Studio Team
+license: MIT
+
+activation:
+  intent_keywords: [场景, scene, 背景, anchor, ControlNet, environment, location]
+  context_required: [project_id]
+
+scope_default: global
