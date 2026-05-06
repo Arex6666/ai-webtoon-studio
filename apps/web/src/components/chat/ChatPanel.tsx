@@ -1,6 +1,17 @@
 /**
  * ChatPanel Component
- * Main chat interface panel
+ *
+ * Feature-flag dispatcher (B-1 Phase B Group 4 / Task 4.1):
+ *   - flag OFF (default): renders LegacyChatPanel (the original implementation,
+ *     unchanged behavior — connects via chatStore + WebSocket).
+ *   - flag ON  (NEXT_PUBLIC_USE_NEW_AGENT=true): renders the new
+ *     NewAgentChat (useChat hook + SSE) from Task 3.5.
+ *
+ * The exported prop interface (ChatPanelProps) is unchanged so existing
+ * call-sites keep compiling. When the new path is selected, legacy props
+ * are mapped onto NewAgentChat's ChatContext (projectId is required by
+ * both; chapterId is forwarded; episodeNumber/panelId are not part of
+ * the legacy interface and are intentionally omitted).
  */
 
 'use client';
@@ -11,6 +22,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { ChatMessage } from './ChatMessage';
 import { ActionCard } from './ActionCard';
 import { MessageInput } from './MessageInput';
+import { NewAgentChat } from './NewAgentChat';
+import { featureFlags } from '@/lib/featureFlags';
 import { cn } from '@/lib/utils';
 
 interface ChatPanelProps {
@@ -20,7 +33,11 @@ interface ChatPanelProps {
   className?: string;
 }
 
-export function ChatPanel({
+/**
+ * LegacyChatPanel — the pre-B-1 implementation. Kept exported so debug
+ * tools and tests can reference it directly, bypassing the flag.
+ */
+export function LegacyChatPanel({
   conversationId,
   projectId,
   chapterId,
@@ -106,7 +123,7 @@ export function ChatPanel({
                   disabled={!isConnected}
                   className="block mx-auto px-4 py-2 bg-white border rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >
-                  "{suggestion}"
+                  &quot;{suggestion}&quot;
                 </button>
               ))}
             </div>
@@ -155,3 +172,30 @@ export function ChatPanel({
     </div>
   );
 }
+
+/**
+ * ChatPanel — feature-flag dispatcher. Exported as both a named export
+ * (preserving existing `import { ChatPanel } from '@/components/chat'`
+ * call-sites) and as the default export.
+ *
+ * Prop interface is unchanged from the pre-B-1 LegacyChatPanel. When the
+ * new path is selected, props are mapped to NewAgentChat's ChatContext.
+ * The legacy interface has no episodeNumber/panelId, so those context
+ * fields are left undefined — NewAgentChat treats them as optional.
+ */
+export function ChatPanel(props: ChatPanelProps) {
+  if (featureFlags.useNewAgent) {
+    return (
+      <NewAgentChat
+        conversationId={props.conversationId}
+        context={{
+          projectId: props.projectId,
+          chapterId: props.chapterId,
+        }}
+      />
+    );
+  }
+  return <LegacyChatPanel {...props} />;
+}
+
+export default ChatPanel;
