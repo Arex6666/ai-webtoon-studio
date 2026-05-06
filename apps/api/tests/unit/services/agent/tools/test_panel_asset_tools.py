@@ -13,6 +13,11 @@ def clean_registry():
             sys.modules.pop(mod, None)
     yield
     TOOL_REGISTRY.clear()
+    # Also evict modules on teardown so the next test (e.g. the 16-tool forcing
+    # test) re-runs the package __init__ and re-registers tools.
+    for mod in list(sys.modules):
+        if mod.startswith("app.services.agent.tools"):
+            sys.modules.pop(mod, None)
 
 
 def test_generate_panels_metadata():

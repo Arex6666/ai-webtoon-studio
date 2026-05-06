@@ -1,4 +1,5 @@
 """Smoke tests for query_assets / query_episodes / query_panels."""
+import sys
 import pytest
 from unittest.mock import MagicMock
 
@@ -10,6 +11,11 @@ def clean_registry():
     TOOL_REGISTRY.clear()
     yield
     TOOL_REGISTRY.clear()
+    # Also evict modules on teardown so the next test (e.g. the 16-tool forcing
+    # test) re-runs the package __init__ and re-registers tools.
+    for mod in list(sys.modules):
+        if mod.startswith("app.services.agent.tools"):
+            sys.modules.pop(mod, None)
 
 
 def test_query_assets_metadata():

@@ -29,10 +29,10 @@ from app.services.agent.tools import analyze_quality     # noqa: F401
 from app.services.agent.tools import suggest_fixes       # noqa: F401
 
 # Studio commit (batch 5)
-# from app.services.agent.tools import commit_to_studio
+from app.services.agent.tools import commit_to_studio    # noqa: F401
 
 # Panel updates (batch 5)
-# from app.services.agent.tools import update_panel_dialogue
-# from app.services.agent.tools import update_panel_camera
+from app.services.agent.tools import update_panel_dialogue   # noqa: F401
+from app.services.agent.tools import update_panel_camera     # noqa: F401
 
 __all__ = ["TOOL_REGISTRY"]

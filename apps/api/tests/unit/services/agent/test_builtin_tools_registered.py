@@ -1,12 +1,7 @@
 """Static-source regression — confirms all 16 v1 built-in tools register at import.
 
 Reference: spec §4 v1 built-in tool catalog (16 tools).
-
-This test is EXPECTED TO FAIL until Group 5 of B-1 Phase A is complete.
-It serves as a forcing function: when all 16 tools are implemented and the
-package's __init__.py imports them, this turns green.
 """
-import pytest
 
 
 EXPECTED_TOOLS = [
@@ -20,7 +15,6 @@ EXPECTED_TOOLS = [
 ]
 
 
-@pytest.mark.xfail(reason="B-1 Phase A Group 5 not yet implemented; expected to pass once 16 tools land", strict=False)
 def test_all_v1_builtin_tools_registered():
     # Import the tools package — its __init__.py auto-registers every tool file.
     import app.services.agent.tools  # noqa: F401
