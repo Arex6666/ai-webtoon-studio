@@ -194,10 +194,6 @@ app.include_router(conversations.router, prefix="/api/v1", tags=["对话智能�
 # Agent API (chat-driven pre-production)
 app.include_router(agent.router, prefix="/api/v1/agent", tags=["Agent"])
 
-# Phase 5: Studio Orchestrator
-from app.api.routes import orchestrator
-app.include_router(orchestrator.router, prefix="/api/v1", tags=["统一编排"])
-
 # P0: FaceID Embedding System
 app.include_router(faceid.router, prefix="/api/v1", tags=["FaceID"])
 
