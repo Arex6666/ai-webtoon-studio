@@ -43,6 +43,19 @@ STYLE_PROFILES = {
 }
 
 
+def _enforce_seedream_min_pixels(size: tuple[int, int]) -> tuple[int, int]:
+    """Seedream 4.5 requires ≥3,686,400 pixels (e.g. 1920×1920). Small callers
+    (e.g. legacy default 768×512) are bumped up to a 16:9-ish landscape default.
+
+    Callers needing a specific aspect ratio should pass an already-large size.
+    """
+    width, height = size
+    if width * height >= 3_686_400:
+        return width, height
+    # Default scene anchor: 2304×1632 = 3,760,128 pixels (~16:9, slight pad)
+    return 2304, 1632
+
+
 def compose_anchor_prompt(spec: SceneAnchorSpec) -> tuple[str, str]:
     """
     组装场景锚点生成 Prompt
