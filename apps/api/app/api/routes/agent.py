@@ -950,7 +950,50 @@ async def refine_episode(
     episode_number: int,
     req: RefineRequest,
 ):
-    """通过对话改进剧本内容（角色/场景/分镜/风格）。"""
+    """通过对话改进剧本内容（角色/场景/分镜/风格）。
+
+    B-1 Phase C delegation note: the ``refine_script`` tool's only persistent
+    side effect is recording the user's feedback into
+    ``Chapter.layout_json.pending_feedback`` (and a best-effort
+    validate_and_repair pass when a structured storyboard already exists).
+    The tool does not produce the action/updates/affected_panels/reply shape
+    that the frontend RefineResponse contract requires — the LLM dialogue
+    below is what generates that. So we invoke the tool first as a
+    side-effect to share the feedback-recording code path between the
+    chat-driven AgentRunner and this button-driven endpoint, then continue
+    to the LLM dialogue that produces the structured response.
+    """
+    # Delegate the feedback-recording side effect to the refine_script tool so
+    # both the chat path and the button path persist user feedback uniformly.
+    try:
+        from app.services.agent.tools.refine_script import handle as _rs_handle
+        from app.core.database import SessionLocal as _RS_Session
+
+        _project_id = None
+        _cd = req.current_data or {}
+        if isinstance(_cd, dict):
+            _project_id = _cd.get("project_id") or _cd.get("projectId")
+
+        if _project_id:
+            _rs_db = _RS_Session()
+            try:
+                await _rs_handle(
+                    args={"feedback": req.message, "target_section": req.phase},
+                    context={
+                        "project_id": _project_id,
+                        "episode_number": episode_number,
+                    },
+                    db=_rs_db,
+                    tracer=None,
+                )
+            finally:
+                _rs_db.close()
+    except Exception as _rs_e:  # noqa: BLE001 — best-effort delegation
+        logger.warning(
+            "refine_script tool delegation failed (continuing with LLM path): %r",
+            _rs_e,
+        )
+
     llm = StandardLLMService()
 
     system_prompt = f"""你是AI漫剧导演助手。用户正在编辑第{episode_number}集的分镜剧本，当前处于 {req.phase} 阶段。
