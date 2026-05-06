@@ -1,4 +1,6 @@
 /** Chat page scoped to a specific project. */
+// B-1 Phase B / Task 7.2: NewAgentChat dispatch is handled by ChatPanel
+// (see Task 4.1) when NEXT_PUBLIC_USE_NEW_AGENT=true; no page change needed.
 'use client'
 
 import { useEffect, useState } from 'react'
