@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.services.conversation.conversation_service import ConversationService
 from app.services.conversation.agent_orchestrator import AgentOrchestrator
-from app.services.agents import ScriptAgent, AssetAgent, RenderingAgent, QAAgent
+# B-1 Phase E Batch 1: ScriptAgent/AssetAgent/RenderingAgent/QAAgent deleted (replaced by 16 unified tools).
+# This module's legacy chat orchestrator endpoints are slated for deletion in a later batch.
 from app.schemas.conversation import (
     ConversationCreate,
     ConversationResponse,
@@ -30,15 +31,14 @@ def get_conversation_service(db: Session = Depends(get_db)) -> ConversationServi
 
 
 def get_agent_orchestrator(db: Session = Depends(get_db)) -> AgentOrchestrator:
-    """获取智能体编排器实例"""
+    """获取智能体编排器实例
+
+    B-1 Phase E Batch 1: legacy ScriptAgent/AssetAgent/RenderingAgent/QAAgent classes
+    were deleted (replaced by 16 unified tools). The 4 register_agent calls were
+    removed — the orchestrator will operate without those legacy agents until the
+    full chat-stream endpoint stack is removed in a subsequent batch.
+    """
     orchestrator = AgentOrchestrator(db)
-
-    # 注册所有智能体
-    orchestrator.register_agent("script_agent", ScriptAgent(db))
-    orchestrator.register_agent("asset_agent", AssetAgent(db))
-    orchestrator.register_agent("rendering_agent", RenderingAgent(db))
-    orchestrator.register_agent("qa_agent", QAAgent(db))
-
     return orchestrator
 
 

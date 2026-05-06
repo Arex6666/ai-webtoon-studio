@@ -10,7 +10,8 @@ import logging
 
 from app.core.database import get_db
 from app.services.conversation.agent_orchestrator import AgentOrchestrator
-from app.services.agents import ScriptAgent, AssetAgent, RenderingAgent, QAAgent
+# B-1 Phase E Batch 1: ScriptAgent/AssetAgent/RenderingAgent/QAAgent deleted (replaced by 16 unified tools).
+# The legacy /chat WebSocket endpoint below is slated for deletion in a later batch.
 from app.core.config import settings
 import redis.asyncio as aioredis
 
@@ -395,11 +396,10 @@ async def websocket_chat(
     await chat_manager.connect(websocket, conversation_id)
 
     # 创建智能体编排器
+    # B-1 Phase E Batch 1: legacy ScriptAgent/AssetAgent/RenderingAgent/QAAgent classes
+    # were deleted (replaced by 16 unified tools). The 4 register_agent calls were
+    # removed — this legacy chat WS endpoint is slated for deletion in a subsequent batch.
     orchestrator = AgentOrchestrator(db)
-    orchestrator.register_agent("script_agent", ScriptAgent(db))
-    orchestrator.register_agent("asset_agent", AssetAgent(db))
-    orchestrator.register_agent("rendering_agent", RenderingAgent(db))
-    orchestrator.register_agent("qa_agent", QAAgent(db))
 
     try:
         # 发送连接成功消息
