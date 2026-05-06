@@ -43,3 +43,6 @@ from .conversation import Conversation
 from .conversation_message import ConversationMessage
 from .conversation_action import ConversationAction
 from .user import User
+
+# B-1 Agent Runner
+from .skill_installation import SkillInstallation
