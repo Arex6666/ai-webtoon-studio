@@ -9,9 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.services.conversation.conversation_service import ConversationService
-from app.services.conversation.agent_orchestrator import AgentOrchestrator
-# B-1 Phase E Batch 1: ScriptAgent/AssetAgent/RenderingAgent/QAAgent deleted (replaced by 16 unified tools).
-# This module's legacy chat orchestrator endpoints are slated for deletion in a later batch.
+# B-1 Phase E Batch 2: AgentOrchestrator + IntentRouter and the legacy chat-stream
+# REST endpoint + /chat WS handler have been removed. Conversation routes are now
+# CRUD-only — chat streaming lives at /v1/agent/chat (SSE).
 from app.schemas.conversation import (
     ConversationCreate,
     ConversationResponse,
@@ -28,18 +28,6 @@ router = APIRouter(prefix="/conversations", tags=["conversations"])
 def get_conversation_service(db: Session = Depends(get_db)) -> ConversationService:
     """获取对话服务实例"""
     return ConversationService(db)
-
-
-def get_agent_orchestrator(db: Session = Depends(get_db)) -> AgentOrchestrator:
-    """获取智能体编排器实例
-
-    B-1 Phase E Batch 1: legacy ScriptAgent/AssetAgent/RenderingAgent/QAAgent classes
-    were deleted (replaced by 16 unified tools). The 4 register_agent calls were
-    removed — the orchestrator will operate without those legacy agents until the
-    full chat-stream endpoint stack is removed in a subsequent batch.
-    """
-    orchestrator = AgentOrchestrator(db)
-    return orchestrator
 
 
 @router.post("", response_model=ConversationResponse, status_code=201)
@@ -156,47 +144,6 @@ async def get_conversation_messages(
         return messages
     except Exception as e:
         logger.error(f"Failed to get messages: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/{conversation_id}/messages", response_model=dict)
-async def send_message(
-    conversation_id: str,
-    data: ConversationMessageCreate,
-    orchestrator: AgentOrchestrator = Depends(get_agent_orchestrator),
-):
-    """
-    发送消息（REST备用接口，推荐使用WebSocket）
-
-    - **conversation_id**: 对话ID
-    - **content**: 消息内容
-
-    注意：此接口为非流式响应，推荐使用WebSocket获得更好的体验
-    """
-    try:
-        # 验证对话存在
-        conversation = orchestrator.conversation_service.get_conversation(conversation_id)
-        if not conversation:
-            raise HTTPException(status_code=404, detail="Conversation not found")
-
-        # 处理消息（非流式）
-        response_content = ""
-        async for event in orchestrator.process_message(
-            conversation_id=conversation_id,
-            user_message=data.content,
-            streaming=False,
-        ):
-            if event.get("type") == "assistant_message":
-                response_content = event.get("content", "")
-
-        return {
-            "success": True,
-            "response": response_content,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to send message: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

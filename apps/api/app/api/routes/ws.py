@@ -1,17 +1,15 @@
 """
 WebSocket 路由 - 实时任务状态推送和对话
 """
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from typing import Dict, Set, Optional
-from sqlalchemy.orm import Session
 import asyncio
 import json
 import logging
 
-from app.core.database import get_db
-from app.services.conversation.agent_orchestrator import AgentOrchestrator
-# B-1 Phase E Batch 1: ScriptAgent/AssetAgent/RenderingAgent/QAAgent deleted (replaced by 16 unified tools).
-# The legacy /chat WebSocket endpoint below is slated for deletion in a later batch.
+# B-1 Phase E Batch 2: AgentOrchestrator + IntentRouter and the legacy /chat WS
+# handler have been removed. Chat streaming now lives at /v1/agent/chat (SSE).
+# This file retains the /jobs WS endpoint and push_* helpers used by workers.
 from app.core.config import settings
 import redis.asyncio as aioredis
 
@@ -299,174 +297,4 @@ async def broadcast_to_chapter(chapter_id: str, event: dict):
     except Exception as e:
         logger.error(f"Failed to publish to redis: {e}")
 
-
-# ===== 对话 WebSocket 端点 =====
-
-class ChatConnectionManager:
-    """对话 WebSocket 连接管理器"""
-
-    def __init__(self):
-        # 按对话 ID 分组的活跃连接
-        self.active_connections: Dict[str, WebSocket] = {}
-
-    async def connect(self, websocket: WebSocket, conversation_id: str):
-        """建立连接"""
-        await websocket.accept()
-        self.active_connections[conversation_id] = websocket
-        logger.info(f"Chat WebSocket connected for conversation {conversation_id}")
-
-    def disconnect(self, conversation_id: str):
-        """断开连接"""
-        if conversation_id in self.active_connections:
-            del self.active_connections[conversation_id]
-            logger.info(f"Chat WebSocket disconnected for conversation {conversation_id}")
-
-    async def send_to_conversation(self, conversation_id: str, message: dict):
-        """向特定对话发送消息"""
-        websocket = self.active_connections.get(conversation_id)
-        if websocket:
-            try:
-                await websocket.send_text(json.dumps(message))
-            except Exception as e:
-                logger.warning(f"Failed to send chat message: {e}")
-                self.disconnect(conversation_id)
-
-
-# 全局对话连接管理器实例
-chat_manager = ChatConnectionManager()
-
-
-@router.websocket("/chat")
-async def websocket_chat(
-    websocket: WebSocket,
-    conversation_id: str = Query(..., description="对话ID"),
-    db: Session = Depends(get_db)
-):
-    """
-    对话 WebSocket 端点
-
-    连接示例: ws://localhost:8000/api/v1/ws/chat?conversation_id=xxx
-
-    客户端发送消息格式:
-    {
-        "type": "user_message",
-        "content": "创建一个四格漫画..."
-    }
-
-    服务端响应格式:
-    {
-        "type": "assistant_message_chunk",
-        "message_id": "xxx",
-        "chunk": "好的，我来...",
-        "is_final": false
-    }
-    {
-        "type": "assistant_message",
-        "content": "完整消息内容",
-        "intent": "script",
-        "entities": {...}
-    }
-    {
-        "type": "tool_call",
-        "tool_name": "generate_storyboard",
-        "parameters": {...}
-    }
-    {
-        "type": "action_started",
-        "action_id": "xxx",
-        "action_type": "generate_storyboard",
-        "description": "正在生成分镜..."
-    }
-    {
-        "type": "action_progress",
-        "action_id": "xxx",
-        "progress": 0.5,
-        "description": "已完成50%"
-    }
-    {
-        "type": "action_completed",
-        "action_id": "xxx",
-        "result": {...}
-    }
-    {
-        "type": "message_complete",
-        "message_id": "xxx"
-    }
-    """
-    await chat_manager.connect(websocket, conversation_id)
-
-    # 创建智能体编排器
-    # B-1 Phase E Batch 1: legacy ScriptAgent/AssetAgent/RenderingAgent/QAAgent classes
-    # were deleted (replaced by 16 unified tools). The 4 register_agent calls were
-    # removed — this legacy chat WS endpoint is slated for deletion in a subsequent batch.
-    orchestrator = AgentOrchestrator(db)
-
-    try:
-        # 发送连接成功消息
-        await websocket.send_text(json.dumps({
-            "type": "connected",
-            "conversation_id": conversation_id,
-            "message": "WebSocket connection established"
-        }))
-
-        while True:
-            # 接收客户端消息
-            data = await websocket.receive_text()
-
-            try:
-                message = json.loads(data)
-                message_type = message.get("type")
-
-                # 处理心跳
-                if message_type == "ping":
-                    await websocket.send_text(json.dumps({"type": "pong"}))
-                    continue
-
-                # 处理用户消息
-                if message_type == "user_message":
-                    user_content = message.get("content", "")
-
-                    if not user_content.strip():
-                        await websocket.send_text(json.dumps({
-                            "type": "error",
-                            "error": "Message content cannot be empty"
-                        }))
-                        continue
-
-                    # 处理消息并流式返回
-                    try:
-                        async for event in orchestrator.process_message(
-                            conversation_id=conversation_id,
-                            user_message=user_content,
-                            streaming=True,
-                        ):
-                            await websocket.send_text(json.dumps(event))
-
-                    except Exception as e:
-                        logger.error(f"Error processing message: {e}", exc_info=True)
-                        await websocket.send_text(json.dumps({
-                            "type": "error",
-                            "error": str(e)
-                        }))
-
-                else:
-                    logger.warning(f"Unknown message type: {message_type}")
-
-            except json.JSONDecodeError:
-                await websocket.send_text(json.dumps({
-                    "type": "error",
-                    "error": "Invalid JSON format"
-                }))
-            except Exception as e:
-                logger.error(f"Error handling message: {e}", exc_info=True)
-                await websocket.send_text(json.dumps({
-                    "type": "error",
-                    "error": str(e)
-                }))
-
-    except WebSocketDisconnect:
-        chat_manager.disconnect(conversation_id)
-    except Exception as e:
-        logger.error(f"WebSocket error: {e}", exc_info=True)
-        chat_manager.disconnect(conversation_id)
 
