@@ -538,9 +538,45 @@ async def generate_full_episode_script(
     - 角色列表
     - 场景列表
     - 分镜剧本
+
+    B-1 Phase C delegation note: this endpoint produces a richer
+    ``EpisodeScriptResponse`` than the ``generate_script`` tool returns
+    (highlights / art_style / Doubao reference images / panel cards), so the
+    response shape cannot be replaced wholesale without breaking frontend
+    contracts. To still share the chat-path and button-path code for the core
+    persistence step (``Chapter.script_raw`` write), we invoke the
+    ``generate_script`` tool's handler as a best-effort side-effect at the top
+    of this endpoint. The tool's structured ``ScriptIR`` output is discarded —
+    the LLM-rich generation below is what actually fills the response.
     """
     if not req.outline_text.strip():
         raise HTTPException(status_code=400, detail="outline_text is required")
+
+    # Delegate the canonical "parse + persist script_raw" step to the new
+    # generate_script tool so the chat-driven AgentRunner path and this
+    # button-driven endpoint share one implementation for that side effect.
+    try:
+        from app.services.agent.tools.generate_script import handle as _gs_handle
+        from app.core.database import SessionLocal as _GS_Session
+
+        _gs_db = _GS_Session()
+        try:
+            await _gs_handle(
+                args={"story": req.outline_text},
+                context={
+                    "project_id": getattr(req, "project_id", None),
+                    "episode_number": episode_number,
+                },
+                db=_gs_db,
+                tracer=None,
+            )
+        finally:
+            _gs_db.close()
+    except Exception as _gs_e:  # noqa: BLE001 — best-effort delegation
+        logger.warning(
+            "generate_script tool delegation failed (continuing with LLM path): %r",
+            _gs_e,
+        )
 
     llm = StandardLLMService()
 
