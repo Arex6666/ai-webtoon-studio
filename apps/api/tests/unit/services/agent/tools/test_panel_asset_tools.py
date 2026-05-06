@@ -111,15 +111,94 @@ async def test_generate_panels_invokes_helper(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_create_character_passes_through_name():
+async def test_create_character_requires_db():
     import app.services.agent.tools.create_character as m
     out = await m.handle(
         {"name": "Aria", "description": "warrior", "appearance": "tall, blue hair"},
         {"project_id": "p"},
         db=None, tracer=None,
     )
+    assert "error" in out
+
+
+@pytest.mark.asyncio
+async def test_create_character_inserts_and_dispatches(monkeypatch):
+    """Inserts an Asset row with type='character' and dispatches portrait gen."""
+    from unittest.mock import MagicMock
+    import app.services.agent.tools.create_character as m
+    from app.workers import async_runner as ar_mod
+
+    db = MagicMock()
+    # No existing character with this name.
+    db.query.return_value.filter.return_value.first.return_value = None
+
+    added = []
+    db.add.side_effect = lambda obj: added.append(obj)
+
+    delay_calls = {}
+
+    def fake_delay(**kwargs):
+        delay_calls.update(kwargs)
+
+        class _R:
+            id = "task-portrait-1"
+        return _R()
+
+    monkeypatch.setattr(ar_mod.run_portrait_generation, "delay", fake_delay)
+
+    out = await m.handle(
+        {"name": "Aria", "description": "warrior", "appearance": "tall, blue hair"},
+        {"project_id": "p"},
+        db=db, tracer=None,
+    )
+    assert out["success"] is True
     assert out["name"] == "Aria"
-    assert "dispatched" in out
+    assert out["status"] == "created"
+    assert out["dispatched"]["task_id"] == "task-portrait-1"
+    assert len(added) == 1
+    asset = added[0]
+    assert asset.project_id == "p"
+    assert asset.type == "character"
+    assert asset.name == "Aria"
+    assert asset.reference_image_status == "generating"
+    # appearance string split into traits
+    assert "tall" in asset.data_json["appearance_traits"]
+    assert "blue hair" in asset.data_json["appearance_traits"]
+    db.commit.assert_called()
+    # Dispatched with right args
+    assert delay_calls["character_id"] == asset.id
+    assert delay_calls["character_name"] == "Aria"
+    assert delay_calls["appearance_traits"] == asset.data_json["appearance_traits"]
+
+
+@pytest.mark.asyncio
+async def test_create_character_idempotent_on_name(monkeypatch):
+    """Second call with same name returns the existing asset id, no dispatch."""
+    from unittest.mock import MagicMock
+    import app.services.agent.tools.create_character as m
+    from app.workers import async_runner as ar_mod
+
+    fake_existing = MagicMock()
+    fake_existing.id = "asset-existing"
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = fake_existing
+
+    delay_called = {"v": False}
+
+    def fake_delay(**kwargs):
+        delay_called["v"] = True
+
+    monkeypatch.setattr(ar_mod.run_portrait_generation, "delay", fake_delay)
+
+    out = await m.handle(
+        {"name": "Aria", "description": "x", "appearance": "y"},
+        {"project_id": "p"},
+        db=db, tracer=None,
+    )
+    assert out["success"] is True
+    assert out["asset_id"] == "asset-existing"
+    assert out["status"] == "already_exists"
+    assert delay_called["v"] is False
 
 
 @pytest.mark.asyncio
