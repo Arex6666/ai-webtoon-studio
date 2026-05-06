@@ -22,10 +22,15 @@ class ConversationAction(Base, TimestampMixin):
     action_params_json = Column(JSON, nullable=True, default=dict)  # 动作参数
 
     # 执行追踪
-    status = Column(String, nullable=False, default="pending")  # pending, running, completed, failed
-    job_id = Column(String, ForeignKey("jobs.id"), nullable=True)  # 关联的Job（如果有）
+    status = Column(String, nullable=False, default="pending")  # pending, running, completed, failed, dispatched
+    job_id = Column(String, ForeignKey("jobs.id"), nullable=True)  # 关联的Job（如果有）— Celery 派发亦走此字段
     result_json = Column(JSON, nullable=True, default=dict)  # 执行结果
     error_json = Column(JSON, nullable=True, default=dict)  # 错误信息
+
+    # B-1 tracing + skill provenance
+    trace_id = Column(String(64), nullable=True, index=True)
+    skill_id = Column(String(64), nullable=True, index=True)
+    # skill_id values: "builtin" | "mcp:{conn_id}" | "skill:{install_id}"
 
     # 关系
     conversation = relationship("Conversation", back_populates="actions")
