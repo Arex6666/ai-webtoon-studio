@@ -24,8 +24,11 @@ def clean_registry():
 def test_commit_to_studio_metadata():
     import app.services.agent.tools.commit_to_studio as m
     assert m.tool.name == "commit_to_studio"
-    assert m.tool.expected_duration == "slow"
-    assert m.tool.requires_context == ("project_id", "episode_number")
+    # Phase C wiring: orchestrator is sync-await + DB-bound (no Celery), so
+    # the tool is now classified "fast" and requires conversation_id so it
+    # can build a lean CommitToStudioRequest.
+    assert m.tool.expected_duration == "fast"
+    assert m.tool.requires_context == ("project_id", "episode_number", "conversation_id")
 
 
 def test_update_panel_dialogue_metadata():
@@ -42,10 +45,60 @@ def test_update_panel_camera_metadata():
 
 
 @pytest.mark.asyncio
-async def test_commit_to_studio_returns_dispatched():
+async def test_commit_to_studio_requires_full_context():
+    """Without conversation_id the handler returns a clear context error."""
     import app.services.agent.tools.commit_to_studio as m
     out = await m.handle({}, {"project_id": "p", "episode_number": 1}, db=None, tracer=None)
-    assert "dispatched" in out
+    assert "error" in out
+    assert "conversation_id" in out["error"]
+
+
+@pytest.mark.asyncio
+async def test_commit_to_studio_invokes_orchestrator(monkeypatch):
+    """With full context, the handler delegates to commit_agent_to_studio."""
+    import app.services.agent.tools.commit_to_studio as m
+    from app.services.agent_commit import commit_orchestrator as orchestrator_mod
+
+    captured = {}
+
+    async def fake_commit(db, project_id, req):
+        captured["project_id"] = project_id
+        captured["conversation_id"] = req.conversation_id
+        captured["episode_number"] = req.episode_number
+
+        class _Chapter:
+            id = "chap-123"
+
+        return orchestrator_mod.CommitResult(
+            chapter=_Chapter(),
+            status="created",
+            character_count=2,
+            scene_count=1,
+            panel_count=4,
+            warnings=["warn"],
+            payload_source="conversation",
+        )
+
+    monkeypatch.setattr(orchestrator_mod, "commit_agent_to_studio", fake_commit)
+
+    db = MagicMock()
+    out = await m.handle(
+        {"include_assets": True, "include_script": True, "include_panels": True},
+        {"project_id": "proj-1", "episode_number": 2, "conversation_id": "conv-9"},
+        db=db, tracer=None,
+    )
+    assert out["success"] is True
+    assert out["chapter_id"] == "chap-123"
+    assert out["status"] == "created"
+    assert out["character_count"] == 2
+    assert out["panel_count"] == 4
+    assert out["payload_source"] == "conversation"
+    assert captured == {
+        "project_id": "proj-1",
+        "conversation_id": "conv-9",
+        "episode_number": 2,
+    }
+    db.commit.assert_called()
 
 
 @pytest.mark.asyncio

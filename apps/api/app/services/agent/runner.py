@@ -105,6 +105,11 @@ class AgentRunner:
     async def _loop(
         self, tracer, conversation_id, context, max_steps, allowlist, force_model, last_user_message,
     ) -> str:
+        # Enrich context with the active conversation_id so tool handlers
+        # (e.g. commit_to_studio's lean-payload path) can build a
+        # CommitToStudioRequest without the runner having to pass a separate
+        # arg. Mutating a shallow copy keeps the caller's dict untouched.
+        context = {**context, "conversation_id": conversation_id}
         had_tool_results = False
         for step_index in range(max_steps):
             if await is_canceled(conversation_id):
