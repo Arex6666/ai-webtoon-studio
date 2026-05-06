@@ -19,6 +19,7 @@ from app import models  # noqa: F401 - 确保所有模型在路由导入前加�
 # Trigger reload
 
 from app.api.routes import projects, chapters, panels, assets, render, typeset, compose, auth, identity, scene_anchor, brain, qa, ws, studios, exports, shot_versions, jobs, timeline, bindings, analytics, release, layerpacks, generate, templates, drafts, batch_render, script_pipeline, automation, asset_autobuild, props, conversations, faceid, export_strip, agent, providers, episode_video, media, qa_fix, versions, voices, music
+from app.api.routes import agent_chat, agent_conversations, skills as skills_routes, mcp_admin
 
 # 配置日志
 logging.basicConfig(
@@ -37,9 +38,39 @@ async def lifespan(app: FastAPI):
     logger.info("Starting AI Webtoon Studio API...")
     init_db()
     logger.info("Database initialized")
+
+    # B-1: Load skills + MCP servers
+    from app.db.database import SessionLocal
+    from app.services.agent.skills.loader import bootstrap as bootstrap_skills
+    # Auto-import every tool so registration runs
+    import app.services.agent.tools  # noqa: F401
+
+    db = SessionLocal()
+    try:
+        bootstrap_skills(db)
+    except Exception as e:
+        logger.exception("B-1 skill bootstrap failed: %s", e)
+    finally:
+        db.close()
+
+    # MCP outbound pool — async startup
+    from app.services.agent.mcp_client_pool import MCP_CLIENT_POOL
+    db = SessionLocal()
+    try:
+        await MCP_CLIENT_POOL.start(db)
+    except Exception as e:
+        logger.exception("B-1 MCP pool start failed: %s", e)
+    finally:
+        db.close()
+
     yield
     # 关闭时
     logger.info("Shutting down...")
+    try:
+        from app.services.agent.mcp_client_pool import MCP_CLIENT_POOL
+        await MCP_CLIENT_POOL.stop()
+    except Exception as e:
+        logger.exception("B-1 MCP pool stop failed: %s", e)
 
 
 # 创建 FastAPI 应用
@@ -193,6 +224,12 @@ app.include_router(voices.router, prefix="/api/v1/voices", tags=["配音"])
 
 # Music Asset Management
 app.include_router(music.router, prefix="/api/v1/music", tags=["音乐"])
+
+# B-1 Phase A: Agent runner backend (chat / conversations / skills / outbound MCP)
+app.include_router(agent_chat.router)
+app.include_router(agent_conversations.router)
+app.include_router(skills_routes.router)
+app.include_router(mcp_admin.router)
 
 
 @app.get("/")
