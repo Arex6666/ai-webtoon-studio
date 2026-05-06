@@ -73,6 +73,22 @@ class Settings(BaseSettings):
     # 火山引擎方舟 API Key (用于 Seedream 图片生成)
     ARK_API_KEY: Optional[str] = None
     DOUBAO_IMAGE_MODEL: str = "doubao-seedream-4.5"  # 默认图片生成模型
+
+    # B-1 Agent Runner — model routing
+    LLM_MODEL_FLAGSHIP: str = "doubao-pro-32k"
+    LLM_MODEL_MID: str = "doubao-pro"
+    LLM_MODEL_FAST: str = "doubao-lite-32k"
+    LLM_MAX_RETRIES: int = 3
+    LLM_TIMEOUT_SECONDS: int = 60
+    LLM_PROMPT_CACHE_ENABLED: bool = True
+
+    # B-1 Anthropic provider (no existing key)
+    ANTHROPIC_API_KEY: Optional[str] = None
+    ANTHROPIC_BASE_URL: Optional[str] = None    # None = SDK default
+
+    # B-1 Skill loader
+    SKILL_GUIDANCE_TOKEN_CAP: int = 10000
+    WEBTOON_DATA_DIR: str = "~/.webtoon"
     
     # Video Generation Providers (optional, falls back to LLM keys if not set)
     TONGYI_VIDEO_MODEL: str = "wanx2.1-i2v-plus"  # 图生视频

@@ -51,3 +51,43 @@ class LLMProvider(ABC):
     @property
     @abstractmethod
     def supports_streaming_tool_calls(self) -> bool: ...
+
+
+from functools import lru_cache
+
+from app.core.config import settings
+
+
+@lru_cache(maxsize=1)
+def get_llm_provider() -> LLMProvider:
+    """Return the configured singleton LLM provider."""
+    p = settings.LLM_PROVIDER.lower()
+    if p == "openai":
+        from app.services.agent.providers.openai_compat import OpenAICompatibleProvider
+        return OpenAICompatibleProvider(name="openai", base_url=settings.OPENAI_BASE_URL,
+                                         api_key=settings.OPENAI_API_KEY or "",
+                                         max_retries=settings.LLM_MAX_RETRIES)
+    if p == "deepseek":
+        from app.services.agent.providers.openai_compat import OpenAICompatibleProvider
+        return OpenAICompatibleProvider(name="deepseek", base_url=settings.DEEPSEEK_BASE_URL,
+                                         api_key=settings.DEEPSEEK_API_KEY or "",
+                                         max_retries=settings.LLM_MAX_RETRIES)
+    if p == "doubao":
+        from app.services.agent.providers.openai_compat import OpenAICompatibleProvider
+        return OpenAICompatibleProvider(
+            name="doubao", base_url=settings.DOUBAO_BASE_URL,
+            api_key=settings.DOUBAO_API_KEY or "",
+            max_retries=settings.LLM_MAX_RETRIES,
+        )
+    if p == "tongyi":
+        from app.services.agent.providers.openai_compat import OpenAICompatibleProvider
+        return OpenAICompatibleProvider(
+            name="tongyi", base_url=settings.TONGYI_BASE_URL,
+            api_key=settings.TONGYI_API_KEY or "",
+            max_retries=settings.LLM_MAX_RETRIES,
+        )
+    if p == "anthropic":
+        from app.services.agent.providers.anthropic_provider import AnthropicProvider
+        return AnthropicProvider(api_key=settings.ANTHROPIC_API_KEY or "",
+                                  max_retries=settings.LLM_MAX_RETRIES)
+    raise ValueError(f"Unknown LLM_PROVIDER: {settings.LLM_PROVIDER}")
