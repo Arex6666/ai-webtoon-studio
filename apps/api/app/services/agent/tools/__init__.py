@@ -12,10 +12,10 @@ from app.services.agent.tools import query_assets        # noqa: F401
 from app.services.agent.tools import query_episodes      # noqa: F401
 from app.services.agent.tools import query_panels        # noqa: F401
 
-# Script tools (added in batch 2)
-# from app.services.agent.tools import generate_script
-# from app.services.agent.tools import refine_script
-# from app.services.agent.tools import analyze_script
+# Script tools
+from app.services.agent.tools import generate_script     # noqa: F401
+from app.services.agent.tools import refine_script       # noqa: F401
+from app.services.agent.tools import analyze_script      # noqa: F401
 
 # Panel/asset tools (batch 3)
 # from app.services.agent.tools import generate_panels
