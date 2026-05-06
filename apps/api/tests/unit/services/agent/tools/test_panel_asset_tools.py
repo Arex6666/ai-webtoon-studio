@@ -123,8 +123,108 @@ async def test_create_character_passes_through_name():
 
 
 @pytest.mark.asyncio
-async def test_regenerate_asset_image_uses_context_asset_id():
+async def test_regenerate_asset_image_requires_db():
     import app.services.agent.tools.regenerate_asset_image as m
     out = await m.handle({}, {"project_id": "p", "asset_id": "a-123"}, db=None, tracer=None)
-    assert out["asset_id"] == "a-123"
-    assert "dispatched" in out
+    assert "error" in out
+
+
+@pytest.mark.asyncio
+async def test_regenerate_asset_image_dispatches_character_task(monkeypatch):
+    """For type=character, dispatches run_portrait_generation."""
+    from unittest.mock import MagicMock
+    import app.services.agent.tools.regenerate_asset_image as m
+    from app.workers import async_runner as ar_mod
+
+    fake_asset = MagicMock()
+    fake_asset.id = "a-123"
+    fake_asset.project_id = "p"
+    fake_asset.type = "character"
+    fake_asset.name = "Aria"
+    fake_asset.description = "warrior"
+    fake_asset.data_json = {"appearance_traits": ["tall"]}
+
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = fake_asset
+
+    delay_calls = {}
+
+    def fake_delay(**kwargs):
+        delay_calls.update(kwargs)
+
+        class _R:
+            id = "task-xyz"
+        return _R()
+
+    monkeypatch.setattr(ar_mod.run_portrait_generation, "delay", fake_delay)
+
+    out = await m.handle(
+        {}, {"project_id": "p", "asset_id": "a-123"},
+        db=db, tracer=None,
+    )
+    assert out["success"] is True
+    assert out["asset_type"] == "character"
+    assert out["dispatched"]["task_id"] == "task-xyz"
+    assert delay_calls["character_id"] == "a-123"
+    assert delay_calls["character_name"] == "Aria"
+
+
+@pytest.mark.asyncio
+async def test_regenerate_asset_image_dispatches_scene_task(monkeypatch):
+    """For type=scene, dispatches run_scene_anchor_generation."""
+    from unittest.mock import MagicMock
+    import app.services.agent.tools.regenerate_asset_image as m
+    from app.workers import async_runner as ar_mod
+
+    fake_asset = MagicMock()
+    fake_asset.id = "a-9"
+    fake_asset.project_id = "p"
+    fake_asset.type = "scene"
+    fake_asset.name = "Forest"
+    fake_asset.description = "deep woods"
+    fake_asset.data_json = {"location": "woods", "time_of_day": "dusk"}
+
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = fake_asset
+
+    delay_calls = {}
+
+    def fake_delay(**kwargs):
+        delay_calls.update(kwargs)
+
+        class _R:
+            id = "task-abc"
+        return _R()
+
+    monkeypatch.setattr(ar_mod.run_scene_anchor_generation, "delay", fake_delay)
+
+    out = await m.handle(
+        {}, {"project_id": "p", "asset_id": "a-9"},
+        db=db, tracer=None,
+    )
+    assert out["success"] is True
+    assert out["asset_type"] == "scene"
+    assert delay_calls["scene_id"] == "a-9"
+    assert delay_calls["location"] == "woods"
+
+
+@pytest.mark.asyncio
+async def test_regenerate_asset_image_rejects_unsupported_type():
+    from unittest.mock import MagicMock
+    import app.services.agent.tools.regenerate_asset_image as m
+
+    fake_asset = MagicMock()
+    fake_asset.id = "a-7"
+    fake_asset.project_id = "p"
+    fake_asset.type = "prop"
+    fake_asset.data_json = {}
+
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = fake_asset
+
+    out = await m.handle(
+        {}, {"project_id": "p", "asset_id": "a-7"},
+        db=db, tracer=None,
+    )
+    assert "error" in out
+    assert "not supported" in out["error"]
