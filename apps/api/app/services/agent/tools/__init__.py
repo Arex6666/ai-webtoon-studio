@@ -18,10 +18,10 @@ from app.services.agent.tools import refine_script       # noqa: F401
 from app.services.agent.tools import analyze_script      # noqa: F401
 
 # Panel/asset tools (batch 3)
-# from app.services.agent.tools import generate_panels
-# from app.services.agent.tools import regenerate_asset_image
-# from app.services.agent.tools import create_character
-# from app.services.agent.tools import create_scene
+from app.services.agent.tools import generate_panels         # noqa: F401
+from app.services.agent.tools import regenerate_asset_image  # noqa: F401
+from app.services.agent.tools import create_character        # noqa: F401
+from app.services.agent.tools import create_scene            # noqa: F401
 
 # Render/QA tools (batch 4)
 # from app.services.agent.tools import render_panels
