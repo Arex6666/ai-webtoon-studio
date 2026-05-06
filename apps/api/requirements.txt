@@ -25,7 +25,7 @@ python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 
 # HTTP Client
-httpx==0.26.0
+httpx>=0.27.1
 aiofiles==23.2.1
 
 # Image Processing
@@ -44,4 +44,11 @@ python-dotenv==1.0.0
 # Testing
 pytest==7.4.4
 pytest-asyncio==0.23.3
-httpx==0.26.0
+
+# B-1 Agent Runner
+mcp>=1.0.0           # Anthropic MCP Python SDK (server + client)
+openai>=1.40.0       # OpenAI/DeepSeek/Doubao/Tongyi via OpenAI-compatible mode
+anthropic>=0.40.0    # Anthropic Claude with explicit cache_control
+PyYAML>=6.0          # skill manifest parsing
+gitpython>=3.1.40    # git-based skill installer
+fakeredis>=2.20      # used by integration tests for cancellation
