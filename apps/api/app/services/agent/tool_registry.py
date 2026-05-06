@@ -32,3 +32,66 @@ def is_visible(tool: ToolDefinition, context: dict) -> bool:
         k in context and context[k] is not None
         for k in tool.requires_context
     )
+
+
+class ToolRegistry:
+    """Process-wide registry of available tools.
+
+    Built-in tools register at startup via `register()`. External MCP tools
+    register dynamically when their server connects (and deregister on
+    disconnect). Skills can also register tools they bundle.
+
+    Lookup is by `name`; registration is idempotent on `name` (last-write-wins,
+    with a logged warning for any redefinition).
+    """
+
+    def __init__(self):
+        self._tools: dict[str, ToolDefinition] = {}
+
+    def register(self, tool: ToolDefinition) -> None:
+        if tool.name in self._tools:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Tool name collision: %s overwriting existing registration "
+                "(prev source: %s, new source: %s)",
+                tool.name, self._tools[tool.name].source_skill_id, tool.source_skill_id,
+            )
+        self._tools[tool.name] = tool
+
+    def deregister(self, name: str) -> None:
+        self._tools.pop(name, None)
+
+    def get(self, name: str) -> ToolDefinition | None:
+        return self._tools.get(name)
+
+    def all(self) -> list[ToolDefinition]:
+        return list(self._tools.values())
+
+    def names(self) -> list[str]:
+        return list(self._tools.keys())
+
+    def clear(self) -> None:
+        """Test-only — wipe all registrations."""
+        self._tools.clear()
+
+
+# Process-wide singleton — accessed via `from app.services.agent.tool_registry import TOOL_REGISTRY`
+TOOL_REGISTRY = ToolRegistry()
+
+
+def compute_available_tools(
+    context: dict,
+    allowlist: list[str] | None = None,
+) -> list[ToolDefinition]:
+    """Filter TOOL_REGISTRY by context visibility + optional allowlist.
+
+    Result is sorted by name (deterministic for prompt-cache stability).
+    """
+    out = []
+    for tool in TOOL_REGISTRY.all():
+        if not is_visible(tool, context):
+            continue
+        if allowlist is not None and tool.name not in allowlist:
+            continue
+        out.append(tool)
+    return sorted(out, key=lambda t: t.name)
