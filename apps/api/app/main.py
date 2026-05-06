@@ -25,6 +25,8 @@ logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
+from app.core.logging import configure_trace_logger
+configure_trace_logger()
 logger = logging.getLogger(__name__)
 
 
