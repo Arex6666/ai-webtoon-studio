@@ -32,6 +32,10 @@ class Conversation(Base, TimestampMixin):
     message_count = Column(Integer, nullable=False, default=0)
     total_tokens_used = Column(Integer, nullable=False, default=0)
 
+    # Per-loop agent state machine (orthogonal to status which is conversation lifecycle)
+    agent_state = Column(String(16), nullable=False, default="idle")
+    # values: idle | running | paused | error | done | canceled
+
     # 关系
     project = relationship("Project", back_populates="conversations")
     messages = relationship("ConversationMessage", back_populates="conversation", cascade="all, delete-orphan")
