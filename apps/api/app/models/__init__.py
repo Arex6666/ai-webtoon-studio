@@ -47,3 +47,4 @@ from .user import User
 # B-1 Agent Runner
 from .skill_installation import SkillInstallation
 from .mcp_server_connection import McpServerConnection
+from .mcp_access_token import McpAccessToken
