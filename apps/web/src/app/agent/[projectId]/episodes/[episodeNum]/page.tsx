@@ -23,6 +23,8 @@ import {
     generatePanelImages,
     refineEpisode,
 } from '@/lib/api/episodeApi'
+import { featureFlags } from '@/lib/featureFlags'
+import { NewAgentChat } from '@/components/chat/NewAgentChat'
 
 type EpisodePhase = 'loading' | 'script' | 'confirm' | 'panels' | 'video' | 'done'
 
@@ -1128,6 +1130,29 @@ export default function EpisodeConversationPage() {
                             }}
                             onSkip={() => setGenerationError(null)}
                         />
+                    </div>
+                )}
+
+                {featureFlags.useNewAgent && (
+                    <div className="mt-6 border-t border-gray-200">
+                        <h3 className="px-3 py-2 font-semibold">Agent Chat</h3>
+                        <div className="h-96">
+                            <NewAgentChat
+                                context={{
+                                    projectId: projectId,
+                                    episodeNumber: episodeNum,
+                                }}
+                                toolsAllowlist={[
+                                    'query_assets', 'query_episodes', 'query_panels',
+                                    'generate_script', 'refine_script', 'analyze_script',
+                                    'generate_panels', 'render_panels',
+                                    'regenerate_asset_image',
+                                    'analyze_quality', 'suggest_fixes',
+                                    'commit_to_studio',
+                                    'update_panel_dialogue', 'update_panel_camera',
+                                ]}
+                            />
+                        </div>
                     </div>
                 )}
             </div>
