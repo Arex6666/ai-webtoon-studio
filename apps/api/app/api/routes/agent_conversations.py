@@ -1,4 +1,4 @@
-"""GET/POST/DELETE /v1/agent/conversations/* — conversation management."""
+"""GET/POST/DELETE /api/v1/agent/conversations/* — conversation management."""
 from typing import Optional
 from datetime import datetime
 import uuid
@@ -12,7 +12,7 @@ from app.models.conversation import Conversation
 from app.models.conversation_message import ConversationMessage
 from app.services.agent.cancellation import request_cancel
 
-router = APIRouter(prefix="/v1/agent/conversations", tags=["Agent"])
+router = APIRouter(prefix="/agent/conversations", tags=["Agent"])
 
 
 class ConversationOut(BaseModel):

@@ -1,4 +1,4 @@
-"""POST /v1/agent/chat — main streaming chat entry."""
+"""POST /api/v1/agent/chat — main streaming chat entry."""
 import asyncio
 import logging
 import uuid
@@ -14,7 +14,7 @@ from app.models.conversation import Conversation
 from app.services.agent.runner import AgentRunner
 from app.services.agent.sse import DISPATCHER, stream_response
 
-router = APIRouter(prefix="/v1/agent", tags=["Agent"])
+router = APIRouter(prefix="/agent", tags=["Agent"])
 logger = logging.getLogger(__name__)
 
 

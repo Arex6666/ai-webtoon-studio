@@ -226,10 +226,10 @@ app.include_router(voices.router, prefix="/api/v1/voices", tags=["配音"])
 app.include_router(music.router, prefix="/api/v1/music", tags=["音乐"])
 
 # B-1 Phase A: Agent runner backend (chat / conversations / skills / outbound MCP)
-app.include_router(agent_chat.router)
-app.include_router(agent_conversations.router)
-app.include_router(skills_routes.router)
-app.include_router(mcp_admin.router)
+app.include_router(agent_chat.router, prefix="/api/v1", tags=["B-1 Agent"])
+app.include_router(agent_conversations.router, prefix="/api/v1", tags=["B-1 Agent"])
+app.include_router(skills_routes.router, prefix="/api/v1", tags=["B-1 Skills"])
+app.include_router(mcp_admin.router, prefix="/api/v1", tags=["B-1 MCP"])
 
 
 @app.get("/")

@@ -1,7 +1,26 @@
 """Unit tests for app.services.agent.trace."""
+import logging
+
 import pytest
 
 from app.services.agent.trace import Tracer, with_tracer, get_tracer
+
+
+@pytest.fixture
+def trace_caplog(caplog):
+    """Attach caplog's handler directly to webtoon.trace logger.
+
+    Needed because configure_trace_logger() (run at app.main import time) sets
+    propagate=False on this logger, which prevents caplog's default root-logger
+    capture from seeing trace records.
+    """
+    logger = logging.getLogger("webtoon.trace")
+    logger.addHandler(caplog.handler)
+    prev_level = logger.level
+    logger.setLevel(logging.INFO)
+    yield caplog
+    logger.removeHandler(caplog.handler)
+    logger.setLevel(prev_level)
 
 
 @pytest.mark.asyncio
@@ -16,9 +35,8 @@ async def test_with_tracer_installs_and_clears_tracer():
 
 
 @pytest.mark.asyncio
-async def test_span_records_parent_child_relationship(caplog):
-    import logging
-    caplog.set_level(logging.INFO, logger="webtoon.trace")
+async def test_span_records_parent_child_relationship(trace_caplog):
+    caplog = trace_caplog
     async with with_tracer("t1", conversation_id="c1") as tracer:
         async with tracer.span("parent", color="red"):
             assert tracer.current_span_id is not None
@@ -38,9 +56,8 @@ async def test_span_records_parent_child_relationship(caplog):
 
 
 @pytest.mark.asyncio
-async def test_span_records_error_on_exception(caplog):
-    import logging
-    caplog.set_level(logging.INFO, logger="webtoon.trace")
+async def test_span_records_error_on_exception(trace_caplog):
+    caplog = trace_caplog
     async with with_tracer("t2") as tracer:
         with pytest.raises(ValueError):
             async with tracer.span("doomed"):

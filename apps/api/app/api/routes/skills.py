@@ -1,4 +1,4 @@
-"""GET/POST/DELETE /v1/skills/* — skill installation management."""
+"""GET/POST/DELETE /api/v1/skills/* — skill installation management."""
 from typing import Optional, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,7 +9,7 @@ from app.db.database import get_db
 from app.models.skill_installation import SkillInstallation
 from app.services.agent.skills import installer, lifecycle
 
-router = APIRouter(prefix="/v1/skills", tags=["Skills"])
+router = APIRouter(prefix="/skills", tags=["Skills"])
 
 
 class SkillOut(BaseModel):

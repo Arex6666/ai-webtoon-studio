@@ -1,4 +1,4 @@
-"""GET/POST/DELETE /v1/mcp/connections/* — outbound MCP server admin."""
+"""GET/POST/DELETE /api/v1/mcp/connections/* — outbound MCP server admin."""
 import uuid
 from typing import Optional, Literal
 from datetime import datetime
@@ -11,7 +11,7 @@ from app.db.database import get_db
 from app.models.mcp_server_connection import McpServerConnection
 from app.services.agent.mcp_client_pool import MCP_CLIENT_POOL
 
-router = APIRouter(prefix="/v1/mcp/connections", tags=["MCP"])
+router = APIRouter(prefix="/mcp/connections", tags=["MCP"])
 
 
 class McpConnectionOut(BaseModel):
