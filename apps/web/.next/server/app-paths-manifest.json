@@ -1,11 +1,17 @@
 {
-  "/projects/page": "app/projects/page.js",
+  "/_not-found": "app/_not-found.js",
   "/assets/page": "app/assets/page.js",
+  "/agent/[projectId]/episodes/page": "app/agent/[projectId]/episodes/page.js",
+  "/agent/[projectId]/page": "app/agent/[projectId]/page.js",
+  "/agent/[projectId]/episodes/[episodeNum]/page": "app/agent/[projectId]/episodes/[episodeNum]/page.js",
+  "/chat/[projectId]/page": "app/chat/[projectId]/page.js",
+  "/chat/page": "app/chat/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/page": "app/page.js",
+  "/projects/[projectId]/chapters/[chapterId]/studio/page": "app/projects/[projectId]/chapters/[chapterId]/studio/page.js",
   "/projects/[projectId]/page": "app/projects/[projectId]/page.js",
   "/production/page": "app/production/page.js",
-  "/page": "app/page.js",
-  "/agent/[projectId]/page": "app/agent/[projectId]/page.js",
-  "/projects/[projectId]/chapters/[chapterId]/studio/page": "app/projects/[projectId]/chapters/[chapterId]/studio/page.js",
-  "/agent/[projectId]/episodes/page": "app/agent/[projectId]/episodes/page.js",
-  "/agent/[projectId]/episodes/[episodeNum]/page": "app/agent/[projectId]/episodes/[episodeNum]/page.js"
+  "/projects/page": "app/projects/page.js",
+  "/settings/skills/page": "app/settings/skills/page.js",
+  "/settings/mcp-servers/page": "app/settings/mcp-servers/page.js"
 }
