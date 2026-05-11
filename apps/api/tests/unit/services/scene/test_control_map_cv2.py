@@ -92,3 +92,50 @@ async def test_extract_cv2_unknown_map_type():
     assert result.success is True
     assert "canny" in result.maps
     assert "foo" in result.meta["skipped"]
+
+
+@pytest.mark.asyncio
+async def test_extract_control_maps_dispatches_to_cv2(monkeypatch):
+    called = {}
+
+    async def fake_cv2(anchor_path, scene_id, map_types):
+        called["called"] = True
+        called["map_types"] = map_types
+        return MagicMock(success=True, maps={"canny": "x"}, meta={})
+
+    monkeypatch.setattr(
+        "app.services.scene.control_map_extractor._extract_cv2",
+        fake_cv2,
+    )
+
+    result = await extract_control_maps(
+        anchor_image_path="any/path",
+        scene_id="scene-1",
+        map_types=["canny"],
+        provider="cv2",
+    )
+
+    assert called.get("called") is True
+    assert result.success is True
+
+
+@pytest.mark.asyncio
+async def test_extract_control_maps_default_full_set():
+    """When map_types is None, defaults to all SUPPORTED_MAP_TYPES."""
+    fake_anchor_storage = MagicMock()
+    fake_anchor_storage.load_anchor_image = AsyncMock(
+        return_value=make_grayscale_gradient_png()
+    )
+    fake_anchor_storage.save_control_map = AsyncMock(return_value="x")
+
+    with patch("app.services.scene_anchor.anchor_storage.get_anchor_storage", return_value=fake_anchor_storage):
+        result = await extract_control_maps(
+            anchor_image_path="any/path",
+            scene_id="scene-1",
+            map_types=None,
+            provider="cv2",
+        )
+
+    assert result.success is True
+    assert "canny" in result.maps
+    assert sorted(result.meta["skipped"]) == ["depth", "lineart"]
