@@ -60,8 +60,9 @@ async def enqueue_scene_anchor_generation(
     location: Optional[str] = None,
     time_of_day: Optional[str] = None,
     mood: Optional[str] = None,
-    provider: str = "mock",
-    db_session = None
+    anchor_provider: str = "doubao",
+    control_map_provider: str = "cv2",
+    db_session = None,
 ) -> dict:
     """
     入队场景锚点生成任务
@@ -94,7 +95,7 @@ async def enqueue_scene_anchor_generation(
         # 3. 生成锚点
         success, anchor_path, meta = await generate_anchor_with_retry(
             spec=spec,
-            provider=provider
+            provider=anchor_provider,
         )
         
         if not success:
@@ -106,7 +107,7 @@ async def enqueue_scene_anchor_generation(
         control_result = await extract_control_maps(
             anchor_image_path=anchor_path,
             scene_id=scene_id,
-            provider=provider
+            provider=control_map_provider,
         )
         
         # 5. 更新数据库

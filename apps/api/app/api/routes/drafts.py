@@ -664,8 +664,7 @@ async def apply_draft(
             location=scene.get("location"),
             time_of_day=scene.get("time_of_day"),
             mood=scene.get("mood"),
-            provider="mock",
-            db_session=None
+            db_session=None,
         )
     
     return ApplyDraftResponse(

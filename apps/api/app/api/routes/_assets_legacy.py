@@ -405,8 +405,7 @@ async def regenerate_asset_anchor(
         location=data.get("location"),
         time_of_day=data.get("time_of_day"),
         mood=data.get("mood"),
-        provider="mock",
-        db_session=None
+        db_session=None,
     )
     
     return {"message": "Anchor generation started", "status": "generating"}

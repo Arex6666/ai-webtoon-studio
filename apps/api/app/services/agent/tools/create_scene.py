@@ -116,10 +116,6 @@ async def handle(args: dict, context: dict, db, tracer) -> dict:
             project_id=project_id,
             scene_name=name,
             location=location,
-            time_of_day=time_of_day,
-            mood=mood,
-            provider="mock",
-            db_session=None,
         )
 
         return {

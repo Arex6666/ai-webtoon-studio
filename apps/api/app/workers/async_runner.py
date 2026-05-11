@@ -38,7 +38,7 @@ def run_portrait_generation(
 
 @shared_task(bind=True, name="app.workers.async_runner.run_scene_anchor_generation")
 def run_scene_anchor_generation(
-    self, scene_id, project_id, scene_name, location, provider
+    self, scene_id, project_id, scene_name, location
 ):
     from app.services.scene.retry_strategy import enqueue_scene_anchor_generation
     loop = get_event_loop()
@@ -48,8 +48,7 @@ def run_scene_anchor_generation(
             project_id=project_id,
             scene_name=scene_name,
             location=location,
-            provider=provider,
-            db_session=None
+            db_session=None,
         )
     )
 

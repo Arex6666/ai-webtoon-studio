@@ -484,8 +484,7 @@ async def run_storyboard_task(
                                     location=scene_info.get("location"),
                                     time_of_day=scene_info.get("time_of_day"),
                                     mood=scene_info.get("mood"),
-                                    provider=provider if provider != "mock" else "mock",
-                                    db_session=None
+                                    db_session=None,
                                 )
                             except Exception as scene_err:
                                 logger.warning(f"Scene anchor generation failed for {scene_name}: {scene_err}")
