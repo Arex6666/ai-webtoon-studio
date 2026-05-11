@@ -147,3 +147,58 @@ async def test_generate_doubao_seedream_no_bytes_no_url():
 
     assert result.success is False
     assert "image_data" in result.error or "image_url" in result.error or "neither" in result.error.lower()
+
+
+@pytest.mark.asyncio
+async def test_generate_scene_anchor_dispatches_to_doubao_when_provider_doubao(monkeypatch):
+    """Verifies the provider="doubao" path actually calls _generate_doubao_seedream."""
+    called = {}
+
+    async def fake_doubao(spec, positive, negative, size, seed):
+        called["called"] = True
+        called["size"] = size
+        return MagicMock(success=True, image_path="x", image_url="y", meta={})
+
+    monkeypatch.setattr(
+        "app.services.scene.anchor_generator._generate_doubao_seedream",
+        fake_doubao,
+    )
+
+    spec = SceneAnchorSpec(scene_id="scene-1", name="t")
+    result = await generate_scene_anchor(spec, provider="doubao", size=(1920, 1920), seed=1)
+
+    assert called.get("called") is True
+    assert called["size"] == (1920, 1920)
+    assert result.success is True
+
+
+@pytest.mark.asyncio
+async def test_generate_scene_anchor_small_size_coerced_through_dispatch(monkeypatch):
+    """Even when caller passes the legacy default (768, 512), the size that
+    reaches Seedream API is coerced to ≥3,686,400 pixels (in _enforce helper)."""
+    captured = {}
+
+    fake_provider = MagicMock()
+    fake_provider.api_key = "k"
+
+    async def fake_generate(req):
+        captured["width"] = req.width
+        captured["height"] = req.height
+        return MagicMock(
+            success=True, image_data=make_test_png_bytes(), image_url="x",
+        )
+
+    fake_provider.generate = fake_generate
+
+    fake_anchor_storage = MagicMock()
+    fake_anchor_storage.save_anchor = AsyncMock(return_value={"anchor": "anchors/scenes/scene-1/anchor.png"})
+    fake_anchor_storage.get_anchor_url = MagicMock(return_value="http://x")
+
+    with patch("app.services.layer_factory.doubao_image_provider.get_doubao_image_provider", return_value=fake_provider), \
+         patch("app.services.scene_anchor.anchor_storage.get_anchor_storage", return_value=fake_anchor_storage):
+        spec = SceneAnchorSpec(scene_id="scene-1", name="t")
+        # Passing tiny size — should be bumped
+        await generate_scene_anchor(spec, provider="doubao", size=(768, 512), seed=1)
+
+    # 768×512 = 393,216 → coerced to 2304×1632 (or any ≥3,686,400)
+    assert captured["width"] * captured["height"] >= 3_686_400
