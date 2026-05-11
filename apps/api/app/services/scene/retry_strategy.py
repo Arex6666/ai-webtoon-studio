@@ -146,10 +146,13 @@ async def enqueue_scene_anchor_generation(
 async def _update_scene_status(db, scene_id: str, status: str, error: str = None):
     """更新场景锚点状态"""
     from app.models.asset import Asset
-    
+
     asset = db.query(Asset).filter(Asset.id == scene_id).first()
     if asset:
-        data = asset.data_json or {}
+        # Copy into a new dict so SQLAlchemy's identity-based JSON change detection
+        # fires when we reassign (mutating in place on the same dict reference is
+        # not detected).
+        data = dict(asset.data_json or {})
         data["anchor_status"] = status
         if error:
             data["anchor_error"] = error
@@ -160,10 +163,10 @@ async def _update_scene_status(db, scene_id: str, status: str, error: str = None
 async def _update_scene_anchor(db, scene_id: str, anchor_path: str, control_maps: dict, meta: dict):
     """更新场景锚点数据"""
     from app.models.asset import Asset
-    
+
     asset = db.query(Asset).filter(Asset.id == scene_id).first()
     if asset:
-        data = asset.data_json or {}
+        data = dict(asset.data_json or {})
         data["anchor_image_path"] = anchor_path
         data["anchor_status"] = "ready"
         data["control_maps"] = control_maps
