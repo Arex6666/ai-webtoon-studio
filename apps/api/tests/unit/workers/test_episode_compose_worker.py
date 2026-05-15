@@ -43,7 +43,8 @@ def test_compose_happy_path_three_clips(tmp_path, monkeypatch):
 
     with patch("app.workers.episode_compose_worker.SessionLocal", return_value=db), \
          patch("app.workers.episode_compose_worker.get_storage_client", return_value=fake_storage), \
-         patch("app.workers.episode_compose_worker.subprocess.run", side_effect=fake_subprocess) as sp_mock:
+         patch("app.workers.episode_compose_worker.subprocess.run", side_effect=fake_subprocess) as sp_mock, \
+         patch("app.workers.episode_compose_worker._push_episode_compose_update"):
 
         from app.workers.episode_compose_worker import _execute_compose_sync
         result = _execute_compose_sync("comp-1")
@@ -100,7 +101,8 @@ def test_compose_resolves_latest_succeeded_per_image_index(tmp_path, monkeypatch
 
     with patch("app.workers.episode_compose_worker.SessionLocal", return_value=db), \
          patch("app.workers.episode_compose_worker.get_storage_client", return_value=fake_storage), \
-         patch("app.workers.episode_compose_worker.subprocess.run", side_effect=fake_subprocess):
+         patch("app.workers.episode_compose_worker.subprocess.run", side_effect=fake_subprocess), \
+         patch("app.workers.episode_compose_worker._push_episode_compose_update"):
 
         from app.workers.episode_compose_worker import _execute_compose_sync
         result = _execute_compose_sync("comp-x")
@@ -125,7 +127,8 @@ def test_compose_missing_clips_fails(tmp_path, monkeypatch):
 
     with patch("app.workers.episode_compose_worker.SessionLocal", return_value=db), \
          patch("app.workers.episode_compose_worker.get_storage_client"), \
-         patch("app.workers.episode_compose_worker.subprocess.run"):
+         patch("app.workers.episode_compose_worker.subprocess.run"), \
+         patch("app.workers.episode_compose_worker._push_episode_compose_update"):
         from app.workers.episode_compose_worker import _execute_compose_sync
         result = _execute_compose_sync("comp-m")
 
@@ -152,7 +155,8 @@ def test_compose_download_failure(tmp_path, monkeypatch):
     fake_storage.download_bytes = AsyncMock(side_effect=RuntimeError("network down"))
 
     with patch("app.workers.episode_compose_worker.SessionLocal", return_value=db), \
-         patch("app.workers.episode_compose_worker.get_storage_client", return_value=fake_storage):
+         patch("app.workers.episode_compose_worker.get_storage_client", return_value=fake_storage), \
+         patch("app.workers.episode_compose_worker._push_episode_compose_update"):
         from app.workers.episode_compose_worker import _execute_compose_sync
         result = _execute_compose_sync("comp-d")
 
@@ -180,7 +184,8 @@ def test_compose_ffmpeg_failure_captures_stderr(tmp_path, monkeypatch):
 
     with patch("app.workers.episode_compose_worker.SessionLocal", return_value=db), \
          patch("app.workers.episode_compose_worker.get_storage_client", return_value=fake_storage), \
-         patch("app.workers.episode_compose_worker.subprocess.run", side_effect=fake_subprocess):
+         patch("app.workers.episode_compose_worker.subprocess.run", side_effect=fake_subprocess), \
+         patch("app.workers.episode_compose_worker._push_episode_compose_update"):
         from app.workers.episode_compose_worker import _execute_compose_sync
         result = _execute_compose_sync("comp-f")
 
@@ -213,7 +218,8 @@ def test_compose_upload_failure(tmp_path, monkeypatch):
 
     with patch("app.workers.episode_compose_worker.SessionLocal", return_value=db), \
          patch("app.workers.episode_compose_worker.get_storage_client", return_value=fake_storage), \
-         patch("app.workers.episode_compose_worker.subprocess.run", side_effect=fake_subprocess):
+         patch("app.workers.episode_compose_worker.subprocess.run", side_effect=fake_subprocess), \
+         patch("app.workers.episode_compose_worker._push_episode_compose_update"):
         from app.workers.episode_compose_worker import _execute_compose_sync
         result = _execute_compose_sync("comp-u")
 
@@ -256,7 +262,8 @@ def test_compose_concat_list_contents(tmp_path, monkeypatch):
 
     with patch("app.workers.episode_compose_worker.SessionLocal", return_value=db), \
          patch("app.workers.episode_compose_worker.get_storage_client", return_value=fake_storage), \
-         patch("app.workers.episode_compose_worker.subprocess.run", side_effect=fake_subprocess):
+         patch("app.workers.episode_compose_worker.subprocess.run", side_effect=fake_subprocess), \
+         patch("app.workers.episode_compose_worker._push_episode_compose_update"):
         from app.workers.episode_compose_worker import _execute_compose_sync
         result = _execute_compose_sync("comp-cl")
 

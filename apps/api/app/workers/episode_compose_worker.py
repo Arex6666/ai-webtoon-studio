@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from celery import shared_task
 
@@ -22,18 +22,49 @@ from app.core.storage import get_storage_client
 logger = logging.getLogger(__name__)
 
 
+_compose_loop: Optional["asyncio.AbstractEventLoop"] = None
+
+
 def _run_async(coro):
     """Run an async coroutine from sync Celery context.
 
-    Always uses a fresh event loop so this works both in production (no
-    running loop) and under pytest-asyncio (where the test's loop is already
-    running and would reject run_until_complete).
+    Uses a module-cached event loop (created on first call) so we don't pay
+    Windows ProactorEventLoop init cost on every download/upload. The loop is
+    distinct from any pytest-asyncio loop so run_until_complete doesn't conflict.
     """
-    loop = asyncio.new_event_loop()
+    global _compose_loop
+    if _compose_loop is None or _compose_loop.is_closed():
+        _compose_loop = asyncio.new_event_loop()
+    return _compose_loop.run_until_complete(coro)
+
+
+def _push_episode_compose_update(
+    project_id: str,
+    episode_number: int,
+    event_type: str,
+    data: dict,
+) -> None:
+    """Push a compose-stage WS event by reusing the chapter pub-sub channel.
+
+    Uses project_id as the routing key (frontends interested in compose events
+    subscribe with chapter_id=project_id). Failures are swallowed — WS publish
+    must never break the worker.
+    """
     try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+        from app.api.routes.ws import push_chapter_update
+        _run_async(
+            push_chapter_update(
+                project_id,
+                event_type,
+                {
+                    "project_id": project_id,
+                    "episode_number": episode_number,
+                    **data,
+                },
+            )
+        )
+    except Exception:
+        logger.warning("[EpisodeCompose] WS publish failed", exc_info=True)
 
 
 def _resolve_latest_succeeded_clips(db, project_id: str, episode_number: int) -> List[Job]:
@@ -84,6 +115,11 @@ def _execute_compose_sync(job_id: str) -> dict:
         episode_number = (compose_job.inputs_json or {}).get("episode_number")
         expected = (compose_job.inputs_json or {}).get("expected_clip_count", 0)
 
+        _push_episode_compose_update(
+            project_id, episode_number, "episode_compose_created",
+            {"job_id": job_id, "expected_clip_count": expected},
+        )
+
         clips = _resolve_latest_succeeded_clips(db, project_id, episode_number)
         if len(clips) < expected:
             return _fail_job(
@@ -127,6 +163,12 @@ def _execute_compose_sync(job_id: str) -> dict:
             compose_job.progress = 0.5 * ((i + 1) / len(clips))
             db.commit()
 
+            _push_episode_compose_update(
+                project_id, episode_number, "episode_compose_progress",
+                {"job_id": job_id, "progress": compose_job.progress,
+                 "stage": "downloading_clips"},
+            )
+
         list_file = work_dir / "concat_list.txt"
         list_file.write_text(
             "\n".join(f"file '{p.name}'" for p in clip_paths),
@@ -136,6 +178,11 @@ def _execute_compose_sync(job_id: str) -> dict:
         output_path = work_dir / "output.mp4"
         compose_job.progress = 0.5
         db.commit()
+
+        _push_episode_compose_update(
+            project_id, episode_number, "episode_compose_progress",
+            {"job_id": job_id, "progress": 0.5, "stage": "running_ffmpeg"},
+        )
 
         cmd = [
             "ffmpeg", "-y",
@@ -170,6 +217,11 @@ def _execute_compose_sync(job_id: str) -> dict:
         compose_job.progress = 0.9
         db.commit()
 
+        _push_episode_compose_update(
+            project_id, episode_number, "episode_compose_progress",
+            {"job_id": job_id, "progress": 0.9, "stage": "uploading"},
+        )
+
         output_bytes = output_path.read_bytes()
         output_key = f"episode_videos/{project_id}/ep{episode_number}/compose_{job_id}.mp4"
         try:
@@ -198,6 +250,16 @@ def _execute_compose_sync(job_id: str) -> dict:
         compose_job.finished_at = datetime.utcnow()
         db.commit()
 
+        _push_episode_compose_update(
+            project_id, episode_number, "episode_compose_done",
+            {
+                "job_id": job_id,
+                "video_url": output_key,
+                "duration_sec": compose_job.outputs_json["duration_sec"],
+                "clip_count": len(clips),
+            },
+        )
+
         return {"success": True, "video_url": output_key}
 
     except Exception as e:
@@ -222,6 +284,19 @@ def _fail_job(db, job: Job, code: str, message: str, **extra) -> dict:
     job.finished_at = datetime.utcnow()
     db.commit()
     logger.error("[EpisodeCompose] job %s failed: %s — %s", job.id, code, message)
+
+    # Emit a compose_failed event (best-effort — failures here are swallowed).
+    try:
+        proj = job.project_id
+        ep = (job.inputs_json or {}).get("episode_number")
+        if proj and ep is not None:
+            _push_episode_compose_update(
+                proj, ep, "episode_compose_failed",
+                {"job_id": job.id, "error_code": code, "message": message},
+            )
+    except Exception:
+        logger.warning("[EpisodeCompose] failed-event emit raised", exc_info=True)
+
     return {"success": False, "error": message, "code": code}
 
 
