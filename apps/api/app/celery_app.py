@@ -18,6 +18,7 @@ celery_app = Celery(
         "app.workers.anchor_worker",
         "app.workers.video_worker",
         "app.workers.episode_video_worker",
+        "app.workers.episode_compose_worker",
         "app.workers.export_worker",
         "app.workers.advanced_worker",
         "app.workers.async_runner",
@@ -59,6 +60,7 @@ celery_app.conf.update(
         "app.workers.anchor_worker.*": {"queue": "anchor"},
         "app.workers.video_worker.*": {"queue": "video"},
         "app.workers.episode_video_worker.*": {"queue": "video"},
+        "app.workers.episode_compose_worker.*": {"queue": "video"},
         "app.workers.export_worker.*": {"queue": "export"},
     },
     
