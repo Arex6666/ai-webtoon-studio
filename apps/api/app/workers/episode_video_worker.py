@@ -16,6 +16,7 @@ from app.services.video.video_provider_base import (
     VideoJobStatus,
     get_video_provider,
 )
+from app.services.video.compose_dispatch import _maybe_enqueue_episode_compose
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +162,15 @@ def generate_episode_video_task(
             job.finished_at = datetime.utcnow()
             job.cost_used = result.cost
             db.commit()
+
+            # Phase D: auto-trigger episode compose if all siblings succeeded.
+            # Compose dispatch failure must NOT fail the clip job — the clip succeeded.
+            try:
+                episode_num = (job.inputs_json or {}).get("episode_number")
+                if job.project_id and episode_num is not None:
+                    _maybe_enqueue_episode_compose(db, job.project_id, episode_num)
+            except Exception:
+                logger.exception("[EpisodeVideoWorker] compose dispatch check failed")
 
             logger.info(f"[EpisodeVideoWorker] Job {job_id} completed: {result.video_url}")
             return {"success": True, "outputs": outputs}
