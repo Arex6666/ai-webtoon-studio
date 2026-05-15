@@ -38,6 +38,9 @@ from app.services.export.bundle_errors import (
     BundleBuildError, MissingArtifactError, CorruptManifestError,
     ChapterNotFoundError, NoPanelsError, NoLayerPackError
 )
+from app.services.export.asset_lock_resolver import AssetLockResolver
+from app.services.export.provenance_collector import ProvenanceCollector
+from app.services.export.export_gate import ExportGate
 from app.services.storage.object_store import get_object_store
 
 logger = logging.getLogger(__name__)
@@ -454,7 +457,8 @@ class BundleBuilder:
         chapter_snapshot: ChapterSnapshot,
         panel_plans: List[PanelArtifactPlan],
         assets_lock: Optional[AssetsLockSpec] = None,
-        provenance_jobs: Optional[ProvenanceJobsSpec] = None
+        provenance_jobs: Optional[ProvenanceJobsSpec] = None,
+        chapter_video: Optional[BundleChapterVideo] = None,
     ) -> BundleManifest:
         """
         Step 5: 写入 Bundle 根目录文件
@@ -534,7 +538,8 @@ class BundleBuilder:
                 generated_at=now.isoformat(),
                 export_job_id=self.context.job_id,
                 bundle_spec_version=self.SPEC_VERSION
-            )
+            ),
+            chapter_video=chapter_video,
         )
         
         # 写入 manifest.json
@@ -710,13 +715,39 @@ For more info, see manifest.json
             # Step 4.5: 上传预览图
             self.context.report_progress("packaging", 0.65, "Uploading previews...")
             await self.upload_panel_previews(staging_dir, panel_plans)
-            
+
+            # Step 4.6 (Phase E): collect assets lock, provenance, chapter video
+            self.context.report_progress("packaging", 0.67, "Collecting assets and provenance...")
+            assets_lock = AssetLockResolver(self.db).resolve(chapter_snapshot, panel_plans)
+            provenance_jobs = ProvenanceCollector(self.db).collect(chapter_snapshot, panel_plans)
+
+            chapter_video_info = None
+            chapter_video_result = self._collect_chapter_video(chapter_snapshot)
+            if chapter_video_result is not None:
+                chapter_video_info, video_url = chapter_video_result
+                try:
+                    await self._fetch_chapter_video(staging_dir, video_url)
+                except Exception as e:
+                    logger.warning(
+                        f"[Bundle] chapter_video download failed: {e}; bundling without video"
+                    )
+                    chapter_video_info = None
+
+            # Step 4.7 (Phase E): export gate
+            self.context.report_progress("packaging", 0.68, "Running export gate...")
+            ExportGate(self.db).validate_or_raise(
+                chapter_snapshot, panel_plans, allow_qa_failure=True
+            )
+
             # Step 5: 写入根目录文件
             self.context.report_progress("packaging", 0.7, "Generating bundle files...")
             manifest = self.write_bundle_root_files(
-                staging_dir, 
-                chapter_snapshot, 
-                panel_plans
+                staging_dir,
+                chapter_snapshot,
+                panel_plans,
+                assets_lock=assets_lock,
+                provenance_jobs=provenance_jobs,
+                chapter_video=chapter_video_info,
             )
             
             # Step 6: 打包并上传
