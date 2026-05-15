@@ -221,3 +221,99 @@ async def list_episode_video_jobs(
         ))
 
     return results
+
+
+# ============ Phase D: Compose endpoints ============
+
+
+class ComposeJobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    progress: float
+    video_url: Optional[str] = None
+    clip_count: Optional[int] = None
+    duration_sec: Optional[float] = None
+    error: Optional[str] = None
+
+
+@router.get("/episode/compose-jobs/{job_id}", response_model=ComposeJobStatusResponse)
+async def get_compose_job_status(
+    job_id: str,
+    db: Session = Depends(get_db),
+):
+    """Phase D: status of an episode_video_compose job."""
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Compose job not found")
+    outputs = job.outputs_json or {}
+    return ComposeJobStatusResponse(
+        job_id=job.id,
+        status=job.status,
+        progress=job.progress,
+        video_url=outputs.get("video_url"),
+        clip_count=outputs.get("clip_count"),
+        duration_sec=outputs.get("duration_sec"),
+        error=(job.error_json or {}).get("message") if job.error_json else None,
+    )
+
+
+class ComposeRetryRequest(BaseModel):
+    project_id: str
+
+
+class ComposeRetryResponse(BaseModel):
+    job_id: str
+    status: str
+
+
+@router.post("/episode/{episode_num}/compose-video/retry", response_model=ComposeRetryResponse)
+async def retry_episode_compose(
+    episode_num: int,
+    request: ComposeRetryRequest,
+    db: Session = Depends(get_db),
+):
+    """Phase D: manually enqueue a fresh compose for an episode.
+
+    Used when compose itself failed but every per-panel clip is still 'succeeded'.
+    Bypasses the dedup check (returns a new job_id even if a prior succeeded
+    compose row exists), but still enforces the all-clips-succeeded rule.
+    """
+    candidates = db.query(Job).filter(
+        Job.type == "episode_video",
+        Job.project_id == request.project_id,
+    ).all()
+    siblings = [
+        j for j in candidates
+        if (j.inputs_json or {}).get("episode_number") == episode_num
+    ]
+    if not siblings:
+        raise HTTPException(status_code=404, detail="No per-panel clips for episode")
+    if any(j.status != "succeeded" for j in siblings):
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot compose: one or more sibling clips are not 'succeeded'",
+        )
+
+    compose_job_id = str(uuid.uuid4())
+    job = Job(
+        id=compose_job_id,
+        type="episode_video_compose",
+        provider="ffmpeg",
+        project_id=request.project_id,
+        status="queued",
+        inputs_json={
+            "episode_number": episode_num,
+            "expected_clip_count": len(siblings),
+        },
+    )
+    db.add(job)
+    db.commit()
+
+    from app.workers.episode_compose_worker import execute_episode_compose
+    execute_episode_compose.delay(compose_job_id)
+
+    logger.info(
+        "[EpisodeCompose] retry enqueued %s for project=%s ep=%s clips=%d",
+        compose_job_id, request.project_id, episode_num, len(siblings),
+    )
+    return ComposeRetryResponse(job_id=compose_job_id, status="queued")
