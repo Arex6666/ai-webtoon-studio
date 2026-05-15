@@ -431,6 +431,21 @@ class BundleBuilder:
         )
         return info, video_url
 
+    async def _fetch_chapter_video(
+        self, staging_dir: str, video_url: str
+    ) -> None:
+        """Phase E: download the chapter compose MP4 into the staging directory.
+
+        Caller is responsible for handling exceptions — the silent-skip policy
+        lives at the build() call site, not here, so this helper stays simple
+        and testable.
+        """
+        target_dir = os.path.join(staging_dir, "chapter_video")
+        os.makedirs(target_dir, exist_ok=True)
+        target_path = os.path.join(target_dir, "compose.mp4")
+        await self.object_store.download_to_file(video_url, target_path)
+        logger.info(f"[Bundle] Downloaded chapter video to {target_path}")
+
     # ==================== Step 5: 写入根目录文件 ====================
 
     def write_bundle_root_files(
