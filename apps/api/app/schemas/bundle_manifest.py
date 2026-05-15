@@ -70,26 +70,39 @@ class BundleProvenance(BaseModel):
     system_version: Optional[str] = Field(None, description="系统版本")
 
 
+class BundleChapterVideo(BaseModel):
+    """Phase E: reference to the D motion-comic MP4 for this chapter."""
+    path: str = Field("chapter_video/compose.mp4", description="路径（相对 bundle 根目录）")
+    source_compose_job_id: str = Field(..., description="产生此视频的 episode_video_compose Job ID")
+    duration_sec: Optional[float] = Field(None, description="时长秒数（来自 compose Job outputs）")
+    clip_count: Optional[int] = Field(None, description="参与拼接的 clip 数量")
+    size_bytes: Optional[int] = Field(None, description="最终 MP4 字节数")
+
+
 class BundleManifest(BaseModel):
     """
     Bundle 总清单 - manifest.json
-    
+
     这是整个 Bundle 的权威入口，定义了所有资源的位置和关系
     """
     # 版本与标识
     spec_version: str = Field("1.0.0", description="Bundle 规格版本")
     bundle_id: str = Field(..., description="Bundle 唯一 ID")
     bundle_hash: Optional[str] = Field(None, description="整包 hash（可选）")
-    
+
     # 章节信息
     chapter: BundleChapterInfo
-    
+
     # 面板列表
     panels: List[BundlePanelEntry] = Field(default_factory=list, description="面板清单（按顺序）")
-    
+
     # QA 汇总
     qa_summary: Optional[BundleQASummary] = None
-    
+
+    # Phase E: D motion-comic video reference (optional — present only when a
+    # succeeded episode_video_compose exists for this chapter's order_index)
+    chapter_video: Optional["BundleChapterVideo"] = None
+
     # 来源追溯
     provenance: BundleProvenance
     
