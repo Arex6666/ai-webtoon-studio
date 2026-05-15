@@ -23,9 +23,9 @@ from sqlalchemy.orm import Session
 
 from app.models import Chapter, Panel, LayerPack, Job, RenderJob
 from app.schemas.bundle_manifest import (
-    BundleManifest, BundlePanelEntry, BundleChapterInfo, 
+    BundleManifest, BundlePanelEntry, BundleChapterInfo,
     BundleProvenance, BundleQASummary, ChapterJsonSpec, PanelJsonSpec,
-    AssetsLockSpec, ProvenanceJobsSpec
+    AssetsLockSpec, ProvenanceJobsSpec, BundleChapterVideo,
 )
 from app.schemas.layerpack_manifest import (
     LayerPackManifest, create_layerpack_manifest_from_db
@@ -385,8 +385,54 @@ class BundleBuilder:
             except Exception as e:
                 logger.warning(f"Failed to upload preview for panel {plan.panel_index_str}: {e}")
 
+    # ==================== Step 4.6: Phase E — chapter video ====================
+
+    def _collect_chapter_video(
+        self, chapter_snapshot: ChapterSnapshot
+    ) -> Optional[tuple[BundleChapterVideo, str]]:
+        """Phase E: find the D compose job whose episode_number matches this
+        chapter's order_index. Returns (manifest_entry, minio_video_url) or
+        None. Picks the most recent succeeded compose if multiple exist.
+        """
+        chapter = self.db.query(Chapter).filter(
+            Chapter.id == chapter_snapshot.chapter_id
+        ).first()
+        if chapter is None or chapter.order_index is None:
+            return None
+
+        candidates = (
+            self.db.query(Job)
+            .filter(
+                Job.type == "episode_video_compose",
+                Job.project_id == chapter_snapshot.project_id,
+                Job.status == "succeeded",
+            )
+            .all()
+        )
+        matching = [
+            j for j in candidates
+            if (j.inputs_json or {}).get("episode_number") == chapter.order_index
+        ]
+        if not matching:
+            return None
+
+        latest = max(matching, key=lambda j: j.finished_at or datetime.min)
+        outputs = latest.outputs_json or {}
+        video_url = outputs.get("video_url")
+        if not video_url:
+            return None
+
+        info = BundleChapterVideo(
+            path="chapter_video/compose.mp4",
+            source_compose_job_id=latest.id,
+            duration_sec=outputs.get("duration_sec"),
+            clip_count=outputs.get("clip_count"),
+            size_bytes=outputs.get("size_bytes"),
+        )
+        return info, video_url
+
     # ==================== Step 5: 写入根目录文件 ====================
-    
+
     def write_bundle_root_files(
         self,
         staging_dir: str,
