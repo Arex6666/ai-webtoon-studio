@@ -119,7 +119,7 @@ class BundleBuilder:
             title=chapter.title or f"Chapter {chapter.order_index}",
             version=1,
             panels=panel_snapshots,
-            style_profile_snapshot=chapter.style_profile_json
+            style_profile_snapshot=getattr(chapter, "style_profile_json", None)
         )
     
     # ==================== Step 2: 解析面板产物 ====================
@@ -211,8 +211,9 @@ class BundleBuilder:
             plan.preview_image_url = panel.typeset_image_url  # typeset 优先
         
         # Bubbles JSON (从 Panel 表获取)
-        if panel and panel.bubbles_json:
-            plan.bubbles_json = panel.bubbles_json
+        bubbles = getattr(panel, "bubbles_json", None) if panel else None
+        if bubbles:
+            plan.bubbles_json = bubbles
         
         # QA 数据
         if panel_snapshot.qa_score is not None:
